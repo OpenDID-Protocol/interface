@@ -1,0 +1,1028 @@
+<!-- https://opendid.me -->
+<!doctype html>
+<html lang="en">
+
+<head>
+<!-- header -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="OpenDID: connecting Web3 and Web2">
+
+<title>OpenDID</title>
+<link id="linkFavicon" rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.2/font/bootstrap-icons.css">
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vue@2.6.12/dist/vue.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ethers@5.0.32/dist/ethers.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/base64-js@1.5.1/base64js.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/blueimp-md5@2.19.0/js/md5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/nostr-tools@1.2.1/lib/nostr.bundle.min.js"></script>
+
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@2.1.1/dist/model-viewer.min.js"></script>
+<!--// header -->
+<style>
+    #vm_wallet a.nav-link:hover {
+        color: #754ffe;
+    }
+
+    #wallet a.avatar:hover .rounded-circle {
+        border-color: #754ffe;
+        outline: 0;
+        box-shadow: 0 0 0 0.25rem rgb(13 110 253 / 25%);
+    }
+
+    body {
+        background-color: #f5f4f8;
+    }
+
+    a {
+        text-decoration: none;
+    }
+
+    .bg-primary {
+        background-color: #754ffe !important;
+    }
+
+    #nav-settings a.nav-link {
+        padding: 0.3em 0.8em;
+        margin: 0.2em;
+    }
+
+    #nav-settings a.active {
+        background-color: rgb(13, 110, 253) !important;
+    }
+
+    #nav-settings a.nav-link:hover {
+        background-color: rgba(13, 110, 253, 0.2);
+    }
+
+    @media (min-width: 992px) {
+
+        #nav-settings {
+            display: block;
+            margin: 0 -0.5em;
+        }
+
+        #nav-settings a.nav-link {
+            padding: 0.2em 0.8em;
+            margin: 0.2em 0;
+        }
+    }
+</style>
+<script>
+    /**************************************** 
+    
+    Find i18n languages from:
+    
+    <any id="i18n">
+        <a class="dropdown-item" data-i18n-lang="en" href="#0">English</a>
+        <a data-i18n-lang="ja">日本語</a>
+        <a data-i18n-lang="ko">한국어</a>
+        <a data-i18n-lang="zh">中文</a>
+    </any>
+    
+    ****************************************/
+
+    function initI18N() {
+        window.I18N_ATTRIBUTES = ['title', 'placeholder'];
+        window.LANGUAGES = [];
+        $('#i18n a[data-i18n-lang]').each(function () {
+            let
+                $a = $(this),
+                lang = $a.attr('data-i18n-lang');
+            if (lang) {
+                console.log(`[i18n] found language: ${lang}`);
+                window.LANGUAGES.push(lang);
+                $a.attr('href', 'javascript:setI18N(\'' + lang + '\')');
+            }
+        });
+        if (window.LANGUAGES.length === 0) {
+            console.warn('[i18n] i18n is not enabled.');
+            return;
+        }
+        let defaultLang = window.LANGUAGES[0];
+        console.log(`[i18n] default language: ${defaultLang}`);
+
+        $('*').each(function () {
+            let
+                $c = $(this),
+                el = $c.get(0),
+                attrNames = el.getAttributeNames(),
+                attrDefaults,
+                props = window.I18N_ATTRIBUTES,
+                i18nTextEnabled = false,
+                i18nPropsEnabled = Array(props.length).fill(false),
+                i, prop, value;
+            for (let lang of window.LANGUAGES) {
+                if (attrNames.indexOf('data-i18n:' + lang) >= 0) {
+                    i18nTextEnabled = true;
+                }
+                for (i = 0; i < props.length; i++) {
+                    prop = props[i];
+                    if (attrNames.indexOf('data-i18n-' + prop + ':' + lang) >= 0) {
+                        i18nPropsEnabled[i] = true;
+                    }
+                }
+            }
+            if (i18nTextEnabled) {
+                if (attrNames.indexOf('data-i18n:' + defaultLang) < 0) {
+                    value = $c.text() || '';
+                    $c.attr('data-i18n:' + defaultLang, value);
+                    console.log(`[i18n] auto add: ${defaultLang} = ${value}`);
+                }
+            }
+            for (i = 0; i < props.length; i++) {
+                prop = props[i];
+                if (i18nPropsEnabled[i]) {
+                    let defaultAttr = 'data-i18n-' + prop + ':' + defaultLang;
+                    if (attrNames.indexOf(defaultAttr) < 0) {
+                        value = $c.attr(prop) || '';
+                        $c.attr(defaultAttr, value);
+                        console.log(`[i18n] auto add ${prop}: ${defaultLang} = ${value}`);
+                    }
+                }
+            }
+        });
+
+        let prefer = null;
+        for (let navLang of navigator.languages) {
+            for (let appLang of window.LANGUAGES) {
+                if (navLang.startsWith(appLang)) {
+                    prefer = prefer || appLang;
+                    console.log(`[i18n] detect preferred language: ${prefer}`);
+                    break;
+                }
+            }
+        }
+        setI18N(localStorage.getItem('__i18n__') || prefer || defaultLang);
+    }
+
+    function setI18N(lang) {
+        console.log(`[i18n] switch to ${lang}`);
+        if (window.LANGUAGES.indexOf(lang) < 0) {
+            console.error(`[i18n] invalid language: ${lang}`);
+            return;
+        }
+        localStorage.setItem('__i18n__', lang);
+        let
+            defaultLang = window.LANGUAGES[0],
+            textPrefix = 'data-i18n:' + lang,
+            defaultTextPrefix = 'data-i18n:' + defaultLang,
+            props = window.I18N_ATTRIBUTES;
+        $('*').each(function () {
+            let
+                $c = $(this),
+                el = $c.get(0),
+                attrNames = el.getAttributeNames(),
+                attrValue;
+            // set Text:
+            let textValue = el.getAttribute(textPrefix) || el.getAttribute(defaultTextPrefix) || '';
+            if (textValue) {
+                console.log(`[i18n] set ${lang} = ${textValue}`);
+                $c.text(textValue);
+            }
+            // set properties:
+            for (let prop of props) {
+                let
+                    propPrefix = 'data-i18n-' + prop + ':',
+                    propValue = el.getAttribute(propPrefix + lang) || el.getAttribute(propPrefix + defaultLang) || '';
+                if (propValue) {
+                    console.log(`[i18n] set attr ${prop} = ${propValue}`);
+                    $c.attr(prop, propValue);
+                }
+            }
+        });
+    }
+
+    $(function () {
+        initI18N();
+    });
+</script>
+<script>
+    // global vars:
+    class Contract {
+        address;
+        abi;
+
+        constructor(address, abi) {
+            this.address = address;
+            this.abi = abi;
+        }
+    }
+
+    const isTestnet = location.hostname.endsWith('opendid-testnet.me') || location.hostname === 'localhost';
+
+    let
+        registryAddress = '0x5dA568a00E2007Bb99eE808828253C1eE7d9Bcb1',
+        bindControllerAddress = '0x928191B94159f03C7338d188885Cd6B808025a02',
+        registerControllerAddress = isTestnet ? '0x0C45882D25eeeFE4F36AE29ed50bd53E7d9Ef313' : '0x';
+
+    window.CHAIN_ID = isTestnet ? 80001 : 137;
+    window.CHAIN_NAME = isTestnet ? 'Polygon Testnet' : 'Polygon';
+    window.DOMAIN = isTestnet ? 'opendid-testnet.me' : 'opendid.me';
+    window.SCAN_URL = isTestnet ? 'https://mumbai.polygonscan.com' : 'https://polygonscan.com';
+    window.OPENSEA_URL = isTestnet ? 'https://testnets.opensea.io' : 'https://opensea.io';
+    window.OPENSEA_ASSET_URL = isTestnet ? 'https://testnets.opensea.io/assets/mumbai/' + registryAddress + '/' : 'https://opensea.io/assets/matic/' + registryAddress + '/';
+    window.GRAPH_URL = 'https://api.thegraph.com/subgraphs/name/opendid-protocol/' + (isTestnet ? 'testnet' : 'mainnet')
+
+    window.CONTRACTS = {
+        'registry': new Contract(registryAddress, '[{"inputs":[{"internalType":"string[]","name":"_names","type":"string[]"}],"name":"batchLookup","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address[]","name":"registrants","type":"address[]"}],"name":"batchReverseLookup","outputs":[{"internalType":"string[]","name":"","type":"string[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"labels","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"string","name":"name","type":"string"}],"name":"lookup","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ownerOf","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"string","name":"label","type":"string"}],"name":"queryRecord","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"string[]","name":"_labels","type":"string[]"}],"name":"queryRecords","outputs":[{"internalType":"string[]","name":"","type":"string[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"registrant","type":"address"}],"name":"reverseLookup","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"balance","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"safeTransferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"transferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"}]'),
+        'bindController': new Contract(bindControllerAddress, '[{ "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }, { "internalType": "string[]", "name": "labels", "type": "string[]" }, { "internalType": "string[]", "name": "values", "type": "string[]" }], "name": "batchBind", "outputs": [], "stateMutability": "nonpayable", "type": "function" }]'),
+        'registerController': new Contract(registerControllerAddress, '[{"inputs":[{"internalType":"string","name":"name","type":"string"}],"name":"register","outputs":[],"stateMutability":"payable","type":"function"}]')
+    };
+
+    // did name pattern:
+    function isValidName(name) {
+        return /^[a-z0-9]{5,50}$/.test(name.toLowerCase());
+    }
+
+    function doSearch(formObject) {
+        let
+            $q = $(formObject).find('input[name=q]'),
+            q = $q.val().trim();
+        if (q) {
+            $q.removeClass('is-invalid');
+            return true;
+        }
+        $q.addClass('is-invalid');
+        return false;
+    }
+
+    async function sleep(ms) {
+        return new Promise(resolve => {
+            setTimeout(resolve, ms);
+        });
+    }
+
+    function abbr(obj) {
+        if (obj === null) {
+            return '';
+        }
+        if (ethers.utils.isAddress(obj)) {
+            let s = ethers.utils.getAddress(obj);
+            return s.substring(0, 6) + '...' + s.substring(38);
+        }
+        if (ethers.utils.isHexString(obj) && obj.length === 66) {
+            return obj.substring(0, 6) + '...' + obj.substring(62);
+        }
+        if (typeof obj === 'string') {
+            if (obj.startsWith('npub1') && obj.length > 13) {
+                return obj.substring(0, 9) + '...' + obj.substring(obj.length - 4);
+            }
+            if (obj.length > 10) {
+                return obj.substring(0, 10) + '...';
+            }
+        }
+        return obj
+    }
+
+    function scanUrl(obj) {
+        if (ethers.utils.isAddress(obj)) {
+            return window.SCAN_URL + '/address/' + obj;
+        }
+        if (ethers.utils.isHexString(obj) && obj.length === 66) {
+            return window.SCAN_URL + '/tx/' + obj;
+        }
+        if (typeof obj === 'number' || /^[0-9]{1,20}$/.test(obj)) {
+            return window.SCAN_URL + '/block/' + obj;
+        }
+        return window.SCAN_URL;
+    }
+
+    function copyText(s, callback) {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(s);
+            callback && callback();
+        } else {
+            console.warn('navigator.clipboard not supported.');
+            let textarea = document.createElement('textarea');
+            document.body.appendChild(textarea);
+            textarea.style.position = 'fixed';
+            textarea.style.clip = 'rect(0 0 0 0)';
+            textarea.style.top = '10px';
+            textarea.value = s;
+            textarea.select();
+            document.execCommand('copy', true);
+            document.body.removeChild(textarea);
+            callback && callback();
+        }
+    }
+
+    function isMobile() {
+        return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    }
+
+    function getWeb3Provider() {
+        if (!window.web3Provider) {
+            if (!window.ethereum) {
+                console.error("there is no web3 provider.");
+                return null;
+            }
+            window.web3Provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+        }
+        return window.web3Provider;
+    }
+
+    function translateError(err) {
+        window.err = err;
+        if (typeof (err) === 'string') {
+            return err;
+        }
+        if (err.error && err.error.code && err.error.message) {
+            return `Error (${err.error.code}): ${err.error.message}`;
+        }
+        if (err.code && err.message) {
+            return `Error (${err.code}): ${err.message}`;
+        }
+        return err.message || err.toString();
+    }
+
+    async function postJSON(url, data) {
+        let opt = {
+            type: 'POST',
+            dataType: 'json',
+            contentType: 'application/json',
+            url: url,
+            data: JSON.stringify(data)
+        };
+        return await $.ajax(opt);
+    }
+
+    async function queryGraph(query) {
+        return await postJSON(window.GRAPH_URL, query);
+    }
+
+    async function queryDID(nameOrAddr) {
+        let
+            where = ethers.utils.isAddress(nameOrAddr) ? `owner: "${nameOrAddr}"` : `name: "${nameOrAddr}"`,
+            query = {
+                query: `
+{
+    names(where: { ${where} }) {
+        id
+        name
+        owner
+        blockNumber
+        transactionHash
+        records {
+            label
+            content
+        }
+    }
+}
+`
+            };
+        console.log(`[did] start query by ${nameOrAddr}`);
+        let resp = await queryGraph(query);
+        if (resp.data.names.length > 0) {
+            let did = resp.data.names[0];
+            console.log(`[did] name found: ${did.name}`);
+            return did;
+        }
+        return null;
+    }
+
+    function getDIDRecord(did, label) {
+        if (did.records) {
+            for (let r of did.records) {
+                if (r.label === label) {
+                    return r.content;
+                }
+            }
+        }
+        return null;
+    }
+</script>
+
+    <script>
+        async function init_vm() {
+            console.log('init vm...');
+            let
+                did = null,
+                search = new URLSearchParams(location.search),
+                q = search.get('q') || '';
+            q = q.trim().toLowerCase();
+            try {
+                if (q) {
+                    did = await queryDID(q);
+                }
+            } catch (e) {
+                console.log('query failed.', e);
+                $('#error').show();
+            } finally {
+                $('#loading').hide();
+            }
+
+            window.vm = new Vue({
+                el: '#vm',
+                data: {
+                    account: null,
+                    name: q,
+                    q: q,
+                    did: did
+                },
+                computed: {
+                    canRegister: function () {
+                        return this.did === null && isValidName(this.name);
+                    },
+                    isInvalid: function () {
+                        return this.did === null && !isValidName(this.name);
+                    }
+                },
+                methods: {
+                    scanUrl: function (obj) {
+                        return window.scanUrl(obj);
+                    },
+                    abbr: function (obj) {
+                        return window.abbr(obj);
+                    },
+                    register: async function () {
+                        console.log('async register name...');
+                        if (!vm_wallet.ready) {
+                            return showAlert('Error', 'Please connect wallet first.');
+                        }
+                        let
+                            account = this.account,
+                            loading = null,
+                            confirms = 3,
+                            registry = new ethers.Contract(
+                                window.CONTRACTS.registry.address,
+                                window.CONTRACTS.registry.abi,
+                                window.getWeb3Provider().getSigner()),
+                            controller = new ethers.Contract(
+                                window.CONTRACTS.registerController.address,
+                                window.CONTRACTS.registerController.abi,
+                                window.getWeb3Provider().getSigner());
+                        try {
+                            loading = showLoading('Register', 'Prepare register...');
+                            let balanceOf = await registry.balanceOf(account);
+                            if (balanceOf > 0) {
+                                throw 'Cannot register for current address already own a name.';
+                            }
+                            loading.setMessage('Please sign the transaction to register name "' + this.name + '"...');
+                            let tx = await controller.register(this.name, { value: 0 });
+                            for (let i = 1; i <= confirms; i++) {
+                                loading.setMessage('Waiting for block confirms ' + i + '/' + confirms + '...');
+                                await tx.wait(i);
+                            }
+                            for (let i = 10; i > 0; i--) {
+                                loading.setMessage('Successfully registered name "' + this.name + '"! Refresh page after ' + i + ' seconds...');
+                                await sleep(1000);
+                            }
+                            location.assign('/name.html?name=' + this.name);
+
+                        } catch (err) {
+                            console.error(err);
+                            loading.close();
+                            showAlert('Error', translateError(err));
+                        }
+                    },
+                    accountChanged: function (account) {
+                        this.account = account;
+                    }
+                },
+                mounted: async function () {
+                    $('#vm').show();
+                }
+            });
+        }
+    </script>
+</head>
+
+<body>
+<script>
+    // show dialogs:
+
+    function showAlert(title, message) {
+        let m = $('#alertModal');
+        m.find('.x-title').text(title);
+        m.find('.x-message').text(message);
+        let myModal = new bootstrap.Modal(m.get(0), { backdrop: 'static', keyboard: false });
+        myModal.show();
+    }
+
+    function showConfirm(title, message, callback) {
+        let m = $('#confirmModal');
+        m.find('.x-title').text(title);
+        m.find('.x-message').text(message);
+        let yes = m.find('button.x-yes');
+        yes.off('click');
+        yes.click(function () {
+            callback && callback();
+        });
+        let myModal = new bootstrap.Modal(m.get(0), { backdrop: 'static', keyboard: false });
+        myModal.show();
+    }
+
+    function showInfo(title, message) {
+        let m = $('#infoModal');
+        m.find('.x-title').text(title);
+        if (message.startsWith('<')) {
+            m.find('.x-message').html(message);
+        } else {
+            m.find('.x-message').text(message);
+        }
+        let myModal = new bootstrap.Modal(m.get(0), { backdrop: 'static', keyboard: false });
+        myModal.show();
+    }
+
+    function showLoading(title, message) {
+        let m = $('#loadingModal');
+        let myModal = new bootstrap.Modal(m.get(0), { backdrop: 'static', keyboard: false });
+        let obj = {
+            setTitle: (t) => {
+                m.find('.x-title').text(t);
+            },
+            setMessage: (t) => {
+                m.find('.x-message').text(t);
+            },
+            close: () => {
+                setTimeout(function () {
+                    myModal.hide();
+                }, 500);
+            }
+        }
+        obj.setTitle(title);
+        obj.setMessage(message);
+        myModal.show();
+        return obj;
+    }
+
+    function showTip(msg, isError) {
+        let $div = $('<div/>');
+        $div.addClass('alert');
+        $div.addClass(isError ? 'alert-danger' : 'alert-success');
+        $div.text(msg);
+        $div.css('display', 'none');
+        $('#tips').prepend($div);
+        $div.fadeIn().delay(2000).fadeOut();
+    }
+</script>
+
+<!-- Loading Modal -->
+<div id="loadingModal" class="modal fade" role="dialog" aria-hidden="true" aria-labelledby="loadingLabel">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header align-items-center d-flex">
+                <h4 class="modal-title x-title" id="loadingLabel">&nbsp;</h4>
+            </div>
+            <div class="modal-body">
+                <div class="float-start">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div class="ms-5 ps-4 float-none">
+                    <p class="x-message">&nbsp;</p>
+                </div>
+            </div>
+            <!-- <div class="modal-footer">
+                    <button class="btn btn-outline-primary" data-bs-dismiss="modal" aria-label="Close">Cancel</button>
+                </div> -->
+        </div>
+    </div>
+</div>
+
+<!-- Alert Modal -->
+<div id="alertModal" class="modal fade" role="dialog" aria-hidden="true" aria-labelledby="alertLabel">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header align-items-center d-flex">
+                <h4 class="modal-title x-title" id="alertLabel">&nbsp;</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="float-start">
+                    <i class="fs-2 text-danger bi bi-exclamation-triangle"></i>
+                </div>
+                <div class="ms-5 ps-4 float-none">
+                    <p class="x-message">&nbsp;</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal"
+                    aria-label="Close">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Info Modal -->
+<div id="infoModal" class="modal fade" role="dialog" aria-hidden="true" aria-labelledby="infoLabel">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header align-items-center d-flex">
+                <h4 class="modal-title x-title" id="infoLabel">&nbsp;</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="float-start">
+                    <i class="fs-2 bi bi-info-circle"></i>
+                </div>
+                <div class="ms-5 ps-4 float-none">
+                    <p class="x-message">&nbsp;</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal"
+                    aria-label="Close">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Modal -->
+<div id="confirmModal" class="modal fade" role="dialog" aria-hidden="true" aria-labelledby="alertLabel">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header align-items-center d-flex">
+                <h4 class="modal-title x-title" id="confirmLabel">&nbsp;</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="float-start">
+                    <i class="fs-2 bi bi-question-circle"></i>
+                </div>
+                <div class="ms-5 ps-4 float-none">
+                    <p class="x-message">&nbsp;</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="x-yes btn btn-outline-primary" data-bs-dismiss="modal"
+                    aria-label="Close">Yes</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal"
+                    aria-label="Close">No</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="tips" style="position: fixed; bottom: 50px; left: 5%; display: block; width: 90%; z-index: 999;">
+</div>
+<script>
+    function init_wallet() {
+        console.log('init wallet...');
+        window.vm_wallet = new Vue({
+            el: '#vm_wallet',
+            data: {
+                account: null,
+                chainId: 0,
+                statusLoadingDID: false,
+                did: null,
+                avatar: null
+            },
+            computed: {
+                ready: function () {
+                    return this.account && this.chainId === window.CHAIN_ID;
+                },
+                networkName: function () {
+                    return window.CHAIN_NAME;
+                },
+                wrongNetwork: function () {
+                    return this.chainId !== window.CHAIN_ID;
+                }
+            },
+            methods: {
+                queryName: async function () {
+                    let addr = this.account;
+                    this.statusLoadingDID = true;
+                    try {
+                        let did = await queryDID(addr);
+                        if (addr !== this.account) {
+                            console.warn('[wallet] query result outdated for account changed.');
+                        }
+                        if (did) {
+                            console.log(`[wallet] name found: ${did.name}`);
+                        }
+                        this.did = did;
+                        this.avatar = did && getDIDRecord(did, 'avatar');
+                        try {
+                            window.vm.didChanged && window.vm.didChanged(this.did);
+                        } catch (e) {
+                            console.error('[wallet] call vm.didChanged() failed.', e);
+                        }
+                    }
+                    catch (e) {
+                        console.error('[wallet] query name failed.', e);
+                    }
+                    finally {
+                        this.statusLoadingDID = false;
+                    }
+                },
+                abbr: function (obj) {
+                    return window.abbr(obj);
+                },
+                gotoScanUrl: function () {
+                    window.open(window.scanUrl(this.account));
+                },
+                signMessage: async function (msg) {
+                    console.log('[wallet] request sign message: ' + msg);
+                    return await window.getWeb3Provider().getSigner().signMessage(msg);
+                },
+                accountChanged: function (accounts) {
+                    console.log('[wallet] account changed:', accounts.length === 0 ? null : accounts[0]);
+                    if (accounts.length === 0) {
+                        this.disconnected();
+                    } else {
+                        this.account = accounts[0];
+                        this.did = null;
+                        this.avatar = null;
+                        localStorage.setItem('__address__', this.account);
+                        console.log(`[wallet] connected: ${this.account}`);
+                        try {
+                            window.vm.accountChanged && window.vm.accountChanged(this.account);
+                        } catch (e) {
+                            console.error('[wallet] call vm.accountChanged() failed.', e);
+                        }
+                        try {
+                            window.vm.didChanged && window.vm.didChanged(null);
+                        } catch (e) {
+                            console.error('[wallet] call vm.didChanged() failed.', e);
+                        }
+                        this.queryName();
+                    }
+                },
+                disconnected: async function () {
+                    console.warn('[wallet] disconnected.');
+                    this.account = null;
+                    this.did = null;
+                    this.avatar = null;
+                    try {
+                        window.vm.accountChanged && window.vm.accountChanged(null);
+                    } catch (e) {
+                        console.error('[wallet] call vm.accountChanged(null) failed.', e);
+                    }
+                    try {
+                        window.vm.didChanged && window.vm.didChanged(null);
+                    } catch (e) {
+                        console.error('[wallet] call vm.didChanged() failed.', e);
+                    }
+                },
+                chainChanged: function (chainId) {
+                    console.log('[wallet] chain changed: ' + chainId + ' = ' + parseInt(chainId, 16));
+                    this.chainId = parseInt(chainId, 16);
+                    try {
+                        window.vm.chainChanged && window.vm.chainChanged(this.chainId);
+                    } catch (e) {
+                        console.error('[wallet] call vm.chainChanged() failed.', e);
+                    }
+                },
+                connectWallet: async function () {
+                    console.log('[wallet] try connect wallet...');
+                    if (window.getWeb3Provider() === null) {
+                        console.error('[wallet] there is no web3 provider.');
+                        return false;
+                    }
+                    try {
+                        this.accountChanged(await window.ethereum.request({
+                            method: 'eth_requestAccounts',
+                        }));
+                        this.chainChanged(await window.ethereum.request({
+                            method: 'eth_chainId'
+                        }));
+                        window.ethereum.on('disconnect', this.disconnected);
+                        window.ethereum.on('accountsChanged', this.accountChanged);
+                        window.ethereum.on('chainChanged', this.chainChanged);
+                    } catch (e) {
+                        console.error('[wallet] could not get a wallet connection.', e);
+                        return false;
+                    }
+                    return true;
+                },
+                switchChain: async function () {
+                    if (this.wrongNetwork) {
+                        await ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: '0x' + window.CHAIN_ID.toString(16) }],
+                        });
+                    }
+                }
+            },
+            mounted: async function () {
+                $('#wallet').css('display', 'flex');
+                // try connect wallet:
+                if (window.getWeb3Provider()) {
+                    if (localStorage.getItem('__address__')) {
+                        console.log('[wallet] try auto connect...');
+                        await this.connectWallet();
+                    }
+                }
+            }
+        });
+    }
+
+    $(function () {
+        // try init_vm:
+        if (window.init_vm) {
+            if (window.init_vm.constructor.name === 'AsyncFunction') {
+                window.init_vm()
+                    .catch((e) => {
+                        console.error('init vm failed.', e);
+                        init_wallet();
+                    })
+                    .then(() => {
+                        init_wallet();
+                    });
+            } else {
+                try {
+                    init_vm();
+                } catch (e) {
+                    console.error('init vm failed.', e);
+                }
+                init_wallet();
+            }
+        }
+    });
+</script>
+
+<div id="vm_wallet" class="container">
+    <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom"
+        style="position:fixed; top:0; left:0; right:0; z-index: 99;">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <img src="/assets/images/logo.svg" style="height:35px">
+                <span class="d-none d-md-inline">OpenDID</span>
+            </a>
+            <ul class="navbar-nav d-none d-lg-flex">
+                <form onsubmit="return doSearch(this)" action="/search.html" method="get">
+                    <span class="ps-2 pt-2 text-muted" style="position:absolute"><i class="bi bi-search"></i></span>
+                    <input id="q_top" name="q" type="search" maxlength="50" class="form-control"
+                        style="width:240px;padding-left:2em;" placeholder="Search name or address"
+                        data-i18n-placeholder:ja="名前または住所を検索" data-i18n-placeholder:zh="搜索名字或地址">
+                </form>
+            </ul>
+            <ul id="wallet" class="mr-2 navbar-nav navbar-right-wrap"
+                style="flex-direction: row !important; display:none">
+                <li v-show="statusLoadingDID" class="ms-2 nav-item">
+                    <div class="spinner-border spinner-border-sm" style="margin-top:12px"></div>
+                </li>
+                <li v-show="!statusLoadingDID && did" class="ms-2" style="display:inline-block">
+                    <a v-bind:href="'/name.html?name='+(did && did.name)" class="avatar">
+                        <div class="rounded-circle border border-1 d-block"
+                            style="margin-top: 5px;width:32px;height:32px;background-color:#fff;background-size:cover;"
+                            v-bind:style="{'background-image':'url('+(avatar||'/assets/images/user.svg')+')'}">
+                        </div>
+                    </a>
+                </li>
+                <li v-show="!statusLoadingDID && did" class="ms-2 nav-item">
+                    <a v-bind:href="'/name.html?name='+(did && did.name)" class="nav-link"
+                        v-bind:title="did && did.name" v-text="abbr(did && did.name)"></a>
+                </li>
+                <li v-show="!statusLoadingDID && did" class="ms-2 nav-item">
+                    <a href="/chat.html" class="nav-link" title="Chat with NoStr">
+                        <i class="bi bi-chat-square-text"></i>
+                    </a>
+                </li>
+                <li v-show="account!==null" class="ms-2 d-inline-block">
+                    <div class="d-flex flex-column">
+                        <div style="line-height: 20px;">
+                            <span v-if="chainId!==0 && !wrongNetwork" v-text="networkName"></span>
+                            <a v-if="chainId!==0 && wrongNetwork" v-on:click="switchChain" href="#0"
+                                class="text-danger">
+                                <span data-i18n:zh="不支持的鏈">Unsupported Chain</span>
+                                (<span v-text="chainId"></span>)
+                            </a>
+                        </div>
+                        <div style="line-height: 20px;">
+                            <a v-on:click="gotoScanUrl" href="#0" v-text="abbr(account)"></a>
+                        </div>
+                    </div>
+                </li>
+                <li v-if="account===null" class="ms-2 nav-item">
+                    <button v-on:click="connectWallet" type="button" class="btn btn-primary"
+                        data-i18n:en="Connect Wallet" data-i18n:ja="ウォレットを接続" data-i18n:ko="지갑 연결" data-i18n:zh="連接錢包">
+                    </button>
+                </li>
+                <li class="ms-2 nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#0" data-bs-toggle="dropdown">
+                        <i class="bi bi-translate"></i>
+                    </a>
+                    <ul id="i18n" class="dropdown-menu dropdown-menu-end" style="position: absolute;">
+                        <li><a class="dropdown-item" data-i18n-lang="en">English</a></li>
+                        <li><a class="dropdown-item" data-i18n-lang="ja">日本語</a></li>
+                        <li><a class="dropdown-item" data-i18n-lang="ko">한국어</a></li>
+                        <li><a class="dropdown-item" data-i18n-lang="zh">中文</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </nav>
+</div>
+<div style="height: 62px"><!-- placeholder --></div>
+
+    <div class="bg-primary pt-5 pb-5 mb-4">
+        <div class="container">
+            <div class="row">
+                <div class="col-12">
+                    <h1 class="text-white" data-i18n:ko="분산 ID, 절대 만료되지 않습니다." data-i18n:zh="去中心化ID，永不過期。">
+                        Decentralized ID, Never Expire.</h1>
+                    <p class="text-white fs-4 mt-4 mb-2">Unique name as your decentralized ID for wallets, websites, and
+                        more. Completely open and controlled by your private key.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loading" class="container mt-4 mb-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="spinner-border">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="error" class="container mt-4 mb-4" style="display:none">
+        <div class="row">
+            <div class="col-12">
+                <span class="text-danger">Failed query by name.</span>
+                <a href="javascript:location.reload()">Retry</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="vm" class="container" style="display:none">
+        <div class="row mb-4">
+            <div class="col-md-2"></div>
+            <div class="col-12 col-md-8 text-center">
+                <h1 class="mb-4">Register Your Name Now!</h1>
+                <form onsubmit="return doSearch(this)" action="/search.html" method="get">
+                    <div class="input-group mb-3">
+                        <input v-model="q" id="q_search" name="q" type="search" maxlength="50"
+                            class="form-control form-control-lg" placeholder="Search name or address">
+                        <button class="btn btn-outline-primary" type="submit"><i class="bi bi-search"></i></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="row mb-5">
+            <div class="col-md-4"></div>
+            <div class="col-12 col-md-6 p-4">
+                <div v-if="did!==null">
+                    <p>Sorry, name <span v-text="name" class="fw-bold"></span> is taken.</p>
+                </div>
+                <div v-if="isInvalid">
+                    <p class="text-danger">Sorry, name <span v-text="name" class="fw-bold"></span> is invalid.</p>
+                    <p>An OpenDID name must be:</p>
+                    <ul>
+                        <li>5 ~ 50 characters;</li>
+                        <li>by English letters and digits.</li>
+                    </ul>
+                </div>
+                <div v-if="canRegister">
+                    <p>Great! name <span v-text="name" class="fw-bold"></span> can be registered.</p>
+                    <button v-on:click="register" type="button" class="btn btn-lg btn-outline-primary">
+                        <i class="bi bi-arrow-right-circle"></i>
+                        <span>Register</span> <span v-text="name" class="fw-bold"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- footer -->
+
+<div style="height: 65px"></div>
+
+<div id="footer" class="border-top"
+    style="position:fixed; bottom:0; left:0; right:0;background-color:#f5f4f8;z-index:99;">
+    <div class="container">
+        <div class="row g-0 pt-3 pb-4">
+            <!-- Desc -->
+            <div class="col-12 col-md-4 text-center text-md-start">
+                <a href="https://opendid.me" class="ms-2 me-2">opendid.me</a>
+                <a target="_blank" href="https://discord.opendid.me" class="text-muted ms-2 me-2">
+                    <i class="bi bi-discord"></i>
+                </a>
+                <a target="_blank" href="https://twitter.opendid.me" class="text-muted ms-2 me-2">
+                    <i class="bi bi-twitter"></i>
+                </a>
+                <a target="_blank" href="https://github.opendid.me" class="text-muted ms-2 me-2">
+                    <i class="bi bi-github"></i>
+                </a>
+            </div>
+            <!-- Links -->
+            <div class="d-none d-md-block col-md-8 text-center text-md-end">
+                <a href="#0" class="ms-2 me-2" data-i18n:ja="ドキュメント" data-i18n:ko="문서" data-i18n:zh="文檔">Docs</a>
+                <a href="#0" class="ms-2 me-2"
+                    onclick="window.open(scanUrl(window.CONTRACTS.registry.address))">Status</a>
+                <a href="#0" class="ms-2 me-2" data-i18n:ja="エアドロップ" data-i18n:ko="공중 투하" data-i18n:zh="空投">Airdrop</a>
+                <a href="https://polygonscan.com/token/0x7e3bc4768157284ec70d3cb6394822d54551e71e" class="ms-2 me-2"
+                    data-i18n:ja="ガバナンストークン" data-i18n:ko="거버넌스 토큰" data-i18n:zh="治理代幣">Governance Token</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!--// footer -->
+</body>
+
+</html>

@@ -1,0 +1,1439 @@
+<!-- https://opendid.me -->
+<!doctype html>
+<html lang="en">
+
+<head>
+<!-- header -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="OpenDID: connecting Web3 and Web2">
+
+<title>OpenDID</title>
+<link id="linkFavicon" rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.2/font/bootstrap-icons.css">
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vue@2.6.12/dist/vue.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ethers@5.0.32/dist/ethers.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/base64-js@1.5.1/base64js.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/blueimp-md5@2.19.0/js/md5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/nostr-tools@1.2.1/lib/nostr.bundle.min.js"></script>
+
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@2.1.1/dist/model-viewer.min.js"></script>
+<!--// header -->
+<style>
+    #vm_wallet a.nav-link:hover {
+        color: #754ffe;
+    }
+
+    #wallet a.avatar:hover .rounded-circle {
+        border-color: #754ffe;
+        outline: 0;
+        box-shadow: 0 0 0 0.25rem rgb(13 110 253 / 25%);
+    }
+
+    body {
+        background-color: #f5f4f8;
+    }
+
+    a {
+        text-decoration: none;
+    }
+
+    .bg-primary {
+        background-color: #754ffe !important;
+    }
+
+    #nav-settings a.nav-link {
+        padding: 0.3em 0.8em;
+        margin: 0.2em;
+    }
+
+    #nav-settings a.active {
+        background-color: rgb(13, 110, 253) !important;
+    }
+
+    #nav-settings a.nav-link:hover {
+        background-color: rgba(13, 110, 253, 0.2);
+    }
+
+    @media (min-width: 992px) {
+
+        #nav-settings {
+            display: block;
+            margin: 0 -0.5em;
+        }
+
+        #nav-settings a.nav-link {
+            padding: 0.2em 0.8em;
+            margin: 0.2em 0;
+        }
+    }
+</style>
+<script>
+    /**************************************** 
+    
+    Find i18n languages from:
+    
+    <any id="i18n">
+        <a class="dropdown-item" data-i18n-lang="en" href="#0">English</a>
+        <a data-i18n-lang="ja">日本語</a>
+        <a data-i18n-lang="ko">한국어</a>
+        <a data-i18n-lang="zh">中文</a>
+    </any>
+    
+    ****************************************/
+
+    function initI18N() {
+        window.I18N_ATTRIBUTES = ['title', 'placeholder'];
+        window.LANGUAGES = [];
+        $('#i18n a[data-i18n-lang]').each(function () {
+            let
+                $a = $(this),
+                lang = $a.attr('data-i18n-lang');
+            if (lang) {
+                console.log(`[i18n] found language: ${lang}`);
+                window.LANGUAGES.push(lang);
+                $a.attr('href', 'javascript:setI18N(\'' + lang + '\')');
+            }
+        });
+        if (window.LANGUAGES.length === 0) {
+            console.warn('[i18n] i18n is not enabled.');
+            return;
+        }
+        let defaultLang = window.LANGUAGES[0];
+        console.log(`[i18n] default language: ${defaultLang}`);
+
+        $('*').each(function () {
+            let
+                $c = $(this),
+                el = $c.get(0),
+                attrNames = el.getAttributeNames(),
+                attrDefaults,
+                props = window.I18N_ATTRIBUTES,
+                i18nTextEnabled = false,
+                i18nPropsEnabled = Array(props.length).fill(false),
+                i, prop, value;
+            for (let lang of window.LANGUAGES) {
+                if (attrNames.indexOf('data-i18n:' + lang) >= 0) {
+                    i18nTextEnabled = true;
+                }
+                for (i = 0; i < props.length; i++) {
+                    prop = props[i];
+                    if (attrNames.indexOf('data-i18n-' + prop + ':' + lang) >= 0) {
+                        i18nPropsEnabled[i] = true;
+                    }
+                }
+            }
+            if (i18nTextEnabled) {
+                if (attrNames.indexOf('data-i18n:' + defaultLang) < 0) {
+                    value = $c.text() || '';
+                    $c.attr('data-i18n:' + defaultLang, value);
+                    console.log(`[i18n] auto add: ${defaultLang} = ${value}`);
+                }
+            }
+            for (i = 0; i < props.length; i++) {
+                prop = props[i];
+                if (i18nPropsEnabled[i]) {
+                    let defaultAttr = 'data-i18n-' + prop + ':' + defaultLang;
+                    if (attrNames.indexOf(defaultAttr) < 0) {
+                        value = $c.attr(prop) || '';
+                        $c.attr(defaultAttr, value);
+                        console.log(`[i18n] auto add ${prop}: ${defaultLang} = ${value}`);
+                    }
+                }
+            }
+        });
+
+        let prefer = null;
+        for (let navLang of navigator.languages) {
+            for (let appLang of window.LANGUAGES) {
+                if (navLang.startsWith(appLang)) {
+                    prefer = prefer || appLang;
+                    console.log(`[i18n] detect preferred language: ${prefer}`);
+                    break;
+                }
+            }
+        }
+        setI18N(localStorage.getItem('__i18n__') || prefer || defaultLang);
+    }
+
+    function setI18N(lang) {
+        console.log(`[i18n] switch to ${lang}`);
+        if (window.LANGUAGES.indexOf(lang) < 0) {
+            console.error(`[i18n] invalid language: ${lang}`);
+            return;
+        }
+        localStorage.setItem('__i18n__', lang);
+        let
+            defaultLang = window.LANGUAGES[0],
+            textPrefix = 'data-i18n:' + lang,
+            defaultTextPrefix = 'data-i18n:' + defaultLang,
+            props = window.I18N_ATTRIBUTES;
+        $('*').each(function () {
+            let
+                $c = $(this),
+                el = $c.get(0),
+                attrNames = el.getAttributeNames(),
+                attrValue;
+            // set Text:
+            let textValue = el.getAttribute(textPrefix) || el.getAttribute(defaultTextPrefix) || '';
+            if (textValue) {
+                console.log(`[i18n] set ${lang} = ${textValue}`);
+                $c.text(textValue);
+            }
+            // set properties:
+            for (let prop of props) {
+                let
+                    propPrefix = 'data-i18n-' + prop + ':',
+                    propValue = el.getAttribute(propPrefix + lang) || el.getAttribute(propPrefix + defaultLang) || '';
+                if (propValue) {
+                    console.log(`[i18n] set attr ${prop} = ${propValue}`);
+                    $c.attr(prop, propValue);
+                }
+            }
+        });
+    }
+
+    $(function () {
+        initI18N();
+    });
+</script>
+<script>
+    // global vars:
+    class Contract {
+        address;
+        abi;
+
+        constructor(address, abi) {
+            this.address = address;
+            this.abi = abi;
+        }
+    }
+
+    const isTestnet = location.hostname.endsWith('opendid-testnet.me') || location.hostname === 'localhost';
+
+    let
+        registryAddress = '0x5dA568a00E2007Bb99eE808828253C1eE7d9Bcb1',
+        bindControllerAddress = '0x928191B94159f03C7338d188885Cd6B808025a02',
+        registerControllerAddress = isTestnet ? '0x0C45882D25eeeFE4F36AE29ed50bd53E7d9Ef313' : '0x';
+
+    window.CHAIN_ID = isTestnet ? 80001 : 137;
+    window.CHAIN_NAME = isTestnet ? 'Polygon Testnet' : 'Polygon';
+    window.DOMAIN = isTestnet ? 'opendid-testnet.me' : 'opendid.me';
+    window.SCAN_URL = isTestnet ? 'https://mumbai.polygonscan.com' : 'https://polygonscan.com';
+    window.OPENSEA_URL = isTestnet ? 'https://testnets.opensea.io' : 'https://opensea.io';
+    window.OPENSEA_ASSET_URL = isTestnet ? 'https://testnets.opensea.io/assets/mumbai/' + registryAddress + '/' : 'https://opensea.io/assets/matic/' + registryAddress + '/';
+    window.GRAPH_URL = 'https://api.thegraph.com/subgraphs/name/opendid-protocol/' + (isTestnet ? 'testnet' : 'mainnet')
+
+    window.CONTRACTS = {
+        'registry': new Contract(registryAddress, '[{"inputs":[{"internalType":"string[]","name":"_names","type":"string[]"}],"name":"batchLookup","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address[]","name":"registrants","type":"address[]"}],"name":"batchReverseLookup","outputs":[{"internalType":"string[]","name":"","type":"string[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"labels","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"string","name":"name","type":"string"}],"name":"lookup","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ownerOf","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"string","name":"label","type":"string"}],"name":"queryRecord","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"string[]","name":"_labels","type":"string[]"}],"name":"queryRecords","outputs":[{"internalType":"string[]","name":"","type":"string[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"registrant","type":"address"}],"name":"reverseLookup","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"balance","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"safeTransferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"transferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"}]'),
+        'bindController': new Contract(bindControllerAddress, '[{ "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }, { "internalType": "string[]", "name": "labels", "type": "string[]" }, { "internalType": "string[]", "name": "values", "type": "string[]" }], "name": "batchBind", "outputs": [], "stateMutability": "nonpayable", "type": "function" }]'),
+        'registerController': new Contract(registerControllerAddress, '[{"inputs":[{"internalType":"string","name":"name","type":"string"}],"name":"register","outputs":[],"stateMutability":"payable","type":"function"}]')
+    };
+
+    // did name pattern:
+    function isValidName(name) {
+        return /^[a-z0-9]{5,50}$/.test(name.toLowerCase());
+    }
+
+    function doSearch(formObject) {
+        let
+            $q = $(formObject).find('input[name=q]'),
+            q = $q.val().trim();
+        if (q) {
+            $q.removeClass('is-invalid');
+            return true;
+        }
+        $q.addClass('is-invalid');
+        return false;
+    }
+
+    async function sleep(ms) {
+        return new Promise(resolve => {
+            setTimeout(resolve, ms);
+        });
+    }
+
+    function abbr(obj) {
+        if (obj === null) {
+            return '';
+        }
+        if (ethers.utils.isAddress(obj)) {
+            let s = ethers.utils.getAddress(obj);
+            return s.substring(0, 6) + '...' + s.substring(38);
+        }
+        if (ethers.utils.isHexString(obj) && obj.length === 66) {
+            return obj.substring(0, 6) + '...' + obj.substring(62);
+        }
+        if (typeof obj === 'string') {
+            if (obj.startsWith('npub1') && obj.length > 13) {
+                return obj.substring(0, 9) + '...' + obj.substring(obj.length - 4);
+            }
+            if (obj.length > 10) {
+                return obj.substring(0, 10) + '...';
+            }
+        }
+        return obj
+    }
+
+    function scanUrl(obj) {
+        if (ethers.utils.isAddress(obj)) {
+            return window.SCAN_URL + '/address/' + obj;
+        }
+        if (ethers.utils.isHexString(obj) && obj.length === 66) {
+            return window.SCAN_URL + '/tx/' + obj;
+        }
+        if (typeof obj === 'number' || /^[0-9]{1,20}$/.test(obj)) {
+            return window.SCAN_URL + '/block/' + obj;
+        }
+        return window.SCAN_URL;
+    }
+
+    function copyText(s, callback) {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(s);
+            callback && callback();
+        } else {
+            console.warn('navigator.clipboard not supported.');
+            let textarea = document.createElement('textarea');
+            document.body.appendChild(textarea);
+            textarea.style.position = 'fixed';
+            textarea.style.clip = 'rect(0 0 0 0)';
+            textarea.style.top = '10px';
+            textarea.value = s;
+            textarea.select();
+            document.execCommand('copy', true);
+            document.body.removeChild(textarea);
+            callback && callback();
+        }
+    }
+
+    function isMobile() {
+        return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    }
+
+    function getWeb3Provider() {
+        if (!window.web3Provider) {
+            if (!window.ethereum) {
+                console.error("there is no web3 provider.");
+                return null;
+            }
+            window.web3Provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+        }
+        return window.web3Provider;
+    }
+
+    function translateError(err) {
+        window.err = err;
+        if (typeof (err) === 'string') {
+            return err;
+        }
+        if (err.error && err.error.code && err.error.message) {
+            return `Error (${err.error.code}): ${err.error.message}`;
+        }
+        if (err.code && err.message) {
+            return `Error (${err.code}): ${err.message}`;
+        }
+        return err.message || err.toString();
+    }
+
+    async function postJSON(url, data) {
+        let opt = {
+            type: 'POST',
+            dataType: 'json',
+            contentType: 'application/json',
+            url: url,
+            data: JSON.stringify(data)
+        };
+        return await $.ajax(opt);
+    }
+
+    async function queryGraph(query) {
+        return await postJSON(window.GRAPH_URL, query);
+    }
+
+    async function queryDID(nameOrAddr) {
+        let
+            where = ethers.utils.isAddress(nameOrAddr) ? `owner: "${nameOrAddr}"` : `name: "${nameOrAddr}"`,
+            query = {
+                query: `
+{
+    names(where: { ${where} }) {
+        id
+        name
+        owner
+        blockNumber
+        transactionHash
+        records {
+            label
+            content
+        }
+    }
+}
+`
+            };
+        console.log(`[did] start query by ${nameOrAddr}`);
+        let resp = await queryGraph(query);
+        if (resp.data.names.length > 0) {
+            let did = resp.data.names[0];
+            console.log(`[did] name found: ${did.name}`);
+            return did;
+        }
+        return null;
+    }
+
+    function getDIDRecord(did, label) {
+        if (did.records) {
+            for (let r of did.records) {
+                if (r.label === label) {
+                    return r.content;
+                }
+            }
+        }
+        return null;
+    }
+</script>
+
+    <style>
+        #records th,
+        #records td {
+            font-size: 14px !important;
+        }
+    </style>
+
+    <script>
+
+        function get3DAvatarUrl(did) {
+            if (isMobile()) {
+                return null;
+            }
+            return getDIDRecord(did, 'avatar3d');
+        }
+
+        function getAvatarUrl(did) {
+            let avatar = getDIDRecord(did, 'avatar');
+            if (avatar) {
+                return avatar;
+            }
+            let email = getDIDRecord(did, 'email');
+            if (email) {
+                return 'https://www.gravatar.com/avatar/' + md5(email.toLowerCase());
+            }
+            return '/assets/images/user.svg';
+        }
+
+        async function init_vm() {
+            console.log('init vm...');
+            let
+                search = new URLSearchParams(location.search),
+                name = search.get('name'),
+                did;
+            try {
+                if (!name.trim()) {
+                    throw 'no name.'
+                }
+                did = await queryDID(name.trim());
+                if (!did) {
+                    throw 'not found';
+                }
+            } catch (e) {
+                console.error('load did failed.', e);
+                $('#error').show();
+                return;
+            } finally {
+                $('#loading').hide();
+            }
+            // set image:
+            if (get3DAvatarUrl(did)) {
+                let mv = '<model-viewer style="display:block; width:112px; height:112px;" environment-image="neutral" max-camera-orbit="60deg 150deg auto" min-camera-orbit="-60deg 10deg auto" id="reveal" loading="eager" shadow-intensity="0" exposure="0.75" disable-zoom camera-controls="" src="'
+                    + get3DAvatarUrl(did)
+                    + '" interaction-prompt="none" ar-status="not-presenting"></model-viewer>';
+                $('#avatarImage').html(mv);
+            } else {
+                $('#avatarImage').css('backgroundImage', 'url(' + getAvatarUrl(did) + ')');
+            }
+
+            // init labels:
+            let labels = [
+                'redirect', 'nostr', 'avatar', 'avatar3d', 'email',
+                'btc', 'ada', 'dash', 'doge', 'dot', 'fil', 'ltc', 'sol', 'trx', 'xlm', 'xmr', 'zec',
+                'twitter', 'discord', 'github', 'reddit', 'telegram', 'youtube', 'tiktok', 'facebook', 'instagram', 'linkedin', 'pinterest'
+            ];
+            let placeholders = {
+                nostr: 'npub1xxx',
+                btc: 'bc1xxx',
+                ltc: 'ltc1xxx',
+                doge: 'Dxxx',
+                trx: 'Txxx',
+                fil: 'fxxx',
+                zec: 'txxx'
+            };
+            let prefixes = {
+                discord: 'https://discord.gg/',
+                facebook: 'https://www.facebook.com/',
+                github: 'https://github.com/',
+                instagram: 'https://www.instagram.com/',
+                linkedin: 'https://www.linkedin.com/in/',
+                pinterest: 'https://www.pinterest.com/',
+                reddit: 'https://reddit.com/user/',
+                telegram: 'https://t.me/',
+                tiktok: 'https://www.tiktok.com/@',
+                twitter: 'https://twitter.com/',
+                youtube: 'https://youtube.com/'
+            };
+            let postfixes = {
+                nostr: 'Generate by MetaMask'
+            };
+            let records = {};
+            for (let label of labels) {
+                let value = getDIDRecord(did, label) || '';
+                records[label] = {
+                    editing: false,
+                    old: value,
+                    content: value,
+                    edit: value,
+                    prefix: prefixes[label] || '',
+                    postfix: postfixes[label] || '',
+                    placeholder: placeholders[label] || ''
+                }
+            }
+
+            window.vm = new Vue({
+                el: '#vm',
+                data: {
+                    account: null,
+                    chainId: 0,
+                    did: did,
+                    not_set: '(not set)',
+                    labels: labels,
+                    records: records,
+                    tab: 'tabOverview',
+                    statusCopied: false,
+                    transferTo: '',
+                    acceptTransfer: false
+                },
+                computed: {
+                    canWriteContract: function () {
+                        return this.account && this.account.toLowerCase() === this.did.owner.toLowerCase() && this.chainId === window.CHAIN_ID;
+                    },
+                    statusCanUpdateRecords: function () {
+                        let n = 0;
+                        for (let label in this.records) {
+                            let r = this.records[label];
+                            if (r.editing) {
+                                return false;
+                            }
+                            if (r.content !== r.old) {
+                                n++;
+                            }
+                        }
+                        return n > 0;
+                    }
+                },
+                methods: {
+                    isRecordChanged: function (label) {
+                        return this.records[label].content !== this.records[label].old;
+                    },
+                    resetRecord: function (label) {
+                        this.records[label].content = this.records[label].old;
+                        this.records[label].edit = this.records[label].old;
+                    },
+                    startEditRecord: function (label) {
+                        this.records[label].editing = true;
+                    },
+                    doneEditRecord: function (label) {
+                        this.records[label].content = this.records[label].edit;
+                        this.records[label].editing = false;
+                    },
+                    cancelEditRecord: function (label) {
+                        this.records[label].edit = this.records[label].content;
+                        this.records[label].editing = false;
+                    },
+                    editByPostfix: async function (label) {
+                        if (label === 'nostr') {
+                            await this.editNostr(label);
+                        }
+                    },
+                    editNostr: async function (label) {
+                        try {
+                            let
+                                sig = await vm_wallet.signMessage('nostr:' + ethers.utils.getAddress(this.account)),
+                                nsec = sig.substring(2, 66),
+                                npub = NostrTools.getPublicKey(nsec),
+                                npubEncode = NostrTools.nip19.npubEncode(npub);
+                            this.records[label].edit = npubEncode;
+                        } catch (err) {
+                            showAlert('Error', translateError(err));
+                        }
+                    },
+                    updateRecords: async function () {
+                        let
+                            changed_labels = [],
+                            changed_contents = [],
+                            loading = null,
+                            confirms = 3,
+                            controller = new ethers.Contract(
+                                window.CONTRACTS.bindController.address,
+                                window.CONTRACTS.bindController.abi,
+                                window.getWeb3Provider().getSigner()
+                            );
+                        for (let label in this.records) {
+                            let r = this.records[label];
+                            if (r.content !== r.old) {
+                                changed_labels.push(label);
+                                changed_contents.push(r.content);
+                                console.log(`[records] will update ${label} = ${r.content}`);
+                            }
+                        }
+
+                        try {
+                            loading = showLoading('Update Name Records', 'Please sign the transaction to update records on blockchain...');
+                            let tx = await controller.batchBind(this.did.id, changed_labels, changed_contents);
+                            for (let i = 1; i <= confirms; i++) {
+                                loading.setMessage('Waiting for block confirms ' + i + '/' + confirms + '...');
+                                await tx.wait(i);
+                            }
+                            for (let i = 10; i > 0; i--) {
+                                loading.setMessage('Successfully updated records of name "' + this.did.name + '"! Refresh page after ' + i + ' seconds...');
+                                await sleep(1000);
+                            }
+                            location.reload();
+                        }
+                        catch (err) {
+                            console.error(err);
+                            loading.close();
+                            showAlert('Error', translateError(err));
+                        }
+                    },
+                    transfer: async function () {
+                        if (!ethers.utils.isAddress(this.transferTo)) {
+                            return showAlert('Error', 'Invalid transfer address: ' + this.transferTo);
+                        }
+                        if (!this.canWriteContract) {
+                            return showAlert('Error', 'Please connect wallet with owner address: ' + this.did.owner);
+                        }
+                        let
+                            loading = null,
+                            confirms = 3,
+                            registry = new ethers.Contract(
+                                window.CONTRACTS.registry.address,
+                                window.CONTRACTS.registry.abi,
+                                window.getWeb3Provider().getSigner());
+                        try {
+                            loading = showLoading('Transfer', 'Check receiver address...');
+                            let balanceOf = await registry.balanceOf(this.transferTo);
+                            if (!balanceOf.isZero()) {
+                                throw 'The receiver ' + this.abbr(this.transferTo) + ' cannot retrieve this name because it is hold one name already.';
+                            }
+                            loading.setMessage('Please sign the transfer transaction to confirm transfer...');
+                            let tx = await registry.safeTransferFrom(this.account, this.transferTo, this.did.id);
+                            for (let i = 1; i <= confirms; i++) {
+                                loading.setMessage('Waiting for block confirms ' + i + '/' + confirms + '...');
+                                await tx.wait(i);
+                            }
+                            for (let i = 10; i > 0; i--) {
+                                loading.setMessage('Successfully transfered name "' + this.did.name + '"! Refresh page after ' + i + ' seconds...');
+                                await sleep(1000);
+                            }
+                            location.reload();
+                        }
+                        catch (err) {
+                            console.error(err);
+                            loading.close();
+                            showAlert('Error', translateError(err));
+                        }
+                    },
+                    selectTab: function (tab) {
+                        this.tab = tab;
+                    },
+                    domain: function (name) {
+                        return name + '.' + window.DOMAIN;
+                    },
+                    domainUrl: function (name) {
+                        return 'https://' + this.domain(name);
+                    },
+                    abbr: function (obj) {
+                        return window.abbr(obj);
+                    },
+                    copyText: function (s) {
+                        let that = this;
+                        copyText(s, () => {
+                            that.statusCopied = true;
+                            setTimeout(() => {
+                                that.statusCopied = false;
+                            }, 3000);
+                        });
+                    },
+                    scanUrl: function (obj) {
+                        return window.scanUrl(obj);
+                    },
+                    openSeaUrl: function () {
+                        return window.OPENSEA_ASSET_URL + did.id;
+                    },
+                    accountChanged: function (account) {
+                        this.account = account;
+                    },
+                    chainChanged: function (chainId) {
+                        this.chainId = chainId;
+                    },
+                    image: function () {
+                        let
+                            name = did.name,
+                            addr = window.abbr(did.owner).toLowerCase(),
+                            te = new TextEncoder(),
+                            svgImage =
+                                `<svg viewBox="0 0 960 540" width="960" height="540" xmlns="http://www.w3.org/2000/svg">
+<style>.S{fill:#fff;font:bold 36px sans-serif;dominant-baseline:middle;text-anchor:middle}</style>
+<rect x="0" y="0" width="960" height="540" fill="#003259"></rect>
+<path d="M0 419L12.3 419.5C24.7 420 49.3 421 74 419C98.7 417 123.3 412 148 410.3C172.7 408.7 197.3 410.3 221.8 412.3C246.3 414.3 270.7 416.7 295.2 417.2C319.7 417.7 344.3 416.3 369 413C393.7 409.7 418.3 404.3 443 402C467.7 399.7 492.3 400.3 517 404C541.7 407.7 566.3 414.3 591 419.8C615.7 425.3 640.3 429.7 664.8 426.2C689.3 422.7 713.7 411.3 738.2 410C762.7 408.7 787.3 417.3 812 415.5C836.7 413.7 861.3 401.3 886 396.5C910.7 391.7 935.3 394.3 947.7 395.7L960 397L960 541L947.7 541C935.3 541 910.7 541 886 541C861.3 541 836.7 541 812 541C787.3 541 762.7 541 738.2 541C713.7 541 689.3 541 664.8 541C640.3 541 615.7 541 591 541C566.3 541 541.7 541 517 541C492.3 541 467.7 541 443 541C418.3 541 393.7 541 369 541C344.3 541 319.7 541 295.2 541C270.7 541 246.3 541 221.8 541C197.3 541 172.7 541 148 541C123.3 541 98.7 541 74 541C49.3 541 24.7 541 12.3 541L0 541Z" fill="#4facf7"></path>
+<path d="M0 442L12.3 443.3C24.7 444.7 49.3 447.3 74 451C98.7 454.7 123.3 459.3 148 455.7C172.7 452 197.3 440 221.8 435.3C246.3 430.7 270.7 433.3 295.2 439.2C319.7 445 344.3 454 369 454.8C393.7 455.7 418.3 448.3 443 443.2C467.7 438 492.3 435 517 435C541.7 435 566.3 438 591 438.3C615.7 438.7 640.3 436.3 664.8 439C689.3 441.7 713.7 449.3 738.2 454.8C762.7 460.3 787.3 463.7 812 462C836.7 460.3 861.3 453.7 886 449.2C910.7 444.7 935.3 442.3 947.7 441.2L960 440L960 541L947.7 541C935.3 541 910.7 541 886 541C861.3 541 836.7 541 812 541C787.3 541 762.7 541 738.2 541C713.7 541 689.3 541 664.8 541C640.3 541 615.7 541 591 541C566.3 541 541.7 541 517 541C492.3 541 467.7 541 443 541C418.3 541 393.7 541 369 541C344.3 541 319.7 541 295.2 541C270.7 541 246.3 541 221.8 541C197.3 541 172.7 541 148 541C123.3 541 98.7 541 74 541C49.3 541 24.7 541 12.3 541L0 541Z" fill="#2e7bc1"></path>
+<path d="M0 469L12.3 474.3C24.7 479.7 49.3 490.3 74 495C98.7 499.7 123.3 498.3 148 495C172.7 491.7 197.3 486.3 221.8 484.2C246.3 482 270.7 483 295.2 481.2C319.7 479.3 344.3 474.7 369 472.8C393.7 471 418.3 472 443 471.8C467.7 471.7 492.3 470.3 517 472.5C541.7 474.7 566.3 480.3 591 485.2C615.7 490 640.3 494 664.8 496.5C689.3 499 713.7 500 738.2 499.8C762.7 499.7 787.3 498.3 812 494.3C836.7 490.3 861.3 483.7 886 483.2C910.7 482.7 935.3 488.3 947.7 491.2L960 494L960 541L947.7 541C935.3 541 910.7 541 886 541C861.3 541 836.7 541 812 541C787.3 541 762.7 541 738.2 541C713.7 541 689.3 541 664.8 541C640.3 541 615.7 541 591 541C566.3 541 541.7 541 517 541C492.3 541 467.7 541 443 541C418.3 541 393.7 541 369 541C344.3 541 319.7 541 295.2 541C270.7 541 246.3 541 221.8 541C197.3 541 172.7 541 148 541C123.3 541 98.7 541 74 541C49.3 541 24.7 541 12.3 541L0 541Z" fill="#004e8d"></path>
+<text x="50%" y="35%" class="S" style="font-size:72px">${name}</text><text x="50%" y="55%" class="S">${name}.opendid.me</text><text x="50%" y="68%" class="S">${addr}</text></svg>`;
+                        return 'data:image/svg+xml;base64,' + base64js.fromByteArray(te.encode(svgImage));
+                    }
+                },
+                mounted: async function () {
+                    $('#vm').show();
+                }
+            });
+        }
+    </script>
+</head>
+
+<body>
+<script>
+    // show dialogs:
+
+    function showAlert(title, message) {
+        let m = $('#alertModal');
+        m.find('.x-title').text(title);
+        m.find('.x-message').text(message);
+        let myModal = new bootstrap.Modal(m.get(0), { backdrop: 'static', keyboard: false });
+        myModal.show();
+    }
+
+    function showConfirm(title, message, callback) {
+        let m = $('#confirmModal');
+        m.find('.x-title').text(title);
+        m.find('.x-message').text(message);
+        let yes = m.find('button.x-yes');
+        yes.off('click');
+        yes.click(function () {
+            callback && callback();
+        });
+        let myModal = new bootstrap.Modal(m.get(0), { backdrop: 'static', keyboard: false });
+        myModal.show();
+    }
+
+    function showInfo(title, message) {
+        let m = $('#infoModal');
+        m.find('.x-title').text(title);
+        if (message.startsWith('<')) {
+            m.find('.x-message').html(message);
+        } else {
+            m.find('.x-message').text(message);
+        }
+        let myModal = new bootstrap.Modal(m.get(0), { backdrop: 'static', keyboard: false });
+        myModal.show();
+    }
+
+    function showLoading(title, message) {
+        let m = $('#loadingModal');
+        let myModal = new bootstrap.Modal(m.get(0), { backdrop: 'static', keyboard: false });
+        let obj = {
+            setTitle: (t) => {
+                m.find('.x-title').text(t);
+            },
+            setMessage: (t) => {
+                m.find('.x-message').text(t);
+            },
+            close: () => {
+                setTimeout(function () {
+                    myModal.hide();
+                }, 500);
+            }
+        }
+        obj.setTitle(title);
+        obj.setMessage(message);
+        myModal.show();
+        return obj;
+    }
+
+    function showTip(msg, isError) {
+        let $div = $('<div/>');
+        $div.addClass('alert');
+        $div.addClass(isError ? 'alert-danger' : 'alert-success');
+        $div.text(msg);
+        $div.css('display', 'none');
+        $('#tips').prepend($div);
+        $div.fadeIn().delay(2000).fadeOut();
+    }
+</script>
+
+<!-- Loading Modal -->
+<div id="loadingModal" class="modal fade" role="dialog" aria-hidden="true" aria-labelledby="loadingLabel">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header align-items-center d-flex">
+                <h4 class="modal-title x-title" id="loadingLabel">&nbsp;</h4>
+            </div>
+            <div class="modal-body">
+                <div class="float-start">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div class="ms-5 ps-4 float-none">
+                    <p class="x-message">&nbsp;</p>
+                </div>
+            </div>
+            <!-- <div class="modal-footer">
+                    <button class="btn btn-outline-primary" data-bs-dismiss="modal" aria-label="Close">Cancel</button>
+                </div> -->
+        </div>
+    </div>
+</div>
+
+<!-- Alert Modal -->
+<div id="alertModal" class="modal fade" role="dialog" aria-hidden="true" aria-labelledby="alertLabel">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header align-items-center d-flex">
+                <h4 class="modal-title x-title" id="alertLabel">&nbsp;</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="float-start">
+                    <i class="fs-2 text-danger bi bi-exclamation-triangle"></i>
+                </div>
+                <div class="ms-5 ps-4 float-none">
+                    <p class="x-message">&nbsp;</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal"
+                    aria-label="Close">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Info Modal -->
+<div id="infoModal" class="modal fade" role="dialog" aria-hidden="true" aria-labelledby="infoLabel">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header align-items-center d-flex">
+                <h4 class="modal-title x-title" id="infoLabel">&nbsp;</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="float-start">
+                    <i class="fs-2 bi bi-info-circle"></i>
+                </div>
+                <div class="ms-5 ps-4 float-none">
+                    <p class="x-message">&nbsp;</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal"
+                    aria-label="Close">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Modal -->
+<div id="confirmModal" class="modal fade" role="dialog" aria-hidden="true" aria-labelledby="alertLabel">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header align-items-center d-flex">
+                <h4 class="modal-title x-title" id="confirmLabel">&nbsp;</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="float-start">
+                    <i class="fs-2 bi bi-question-circle"></i>
+                </div>
+                <div class="ms-5 ps-4 float-none">
+                    <p class="x-message">&nbsp;</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="x-yes btn btn-outline-primary" data-bs-dismiss="modal"
+                    aria-label="Close">Yes</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal"
+                    aria-label="Close">No</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="tips" style="position: fixed; bottom: 50px; left: 5%; display: block; width: 90%; z-index: 999;">
+</div>
+<script>
+    function init_wallet() {
+        console.log('init wallet...');
+        window.vm_wallet = new Vue({
+            el: '#vm_wallet',
+            data: {
+                account: null,
+                chainId: 0,
+                statusLoadingDID: false,
+                did: null,
+                avatar: null
+            },
+            computed: {
+                ready: function () {
+                    return this.account && this.chainId === window.CHAIN_ID;
+                },
+                networkName: function () {
+                    return window.CHAIN_NAME;
+                },
+                wrongNetwork: function () {
+                    return this.chainId !== window.CHAIN_ID;
+                }
+            },
+            methods: {
+                queryName: async function () {
+                    let addr = this.account;
+                    this.statusLoadingDID = true;
+                    try {
+                        let did = await queryDID(addr);
+                        if (addr !== this.account) {
+                            console.warn('[wallet] query result outdated for account changed.');
+                        }
+                        if (did) {
+                            console.log(`[wallet] name found: ${did.name}`);
+                        }
+                        this.did = did;
+                        this.avatar = did && getDIDRecord(did, 'avatar');
+                        try {
+                            window.vm.didChanged && window.vm.didChanged(this.did);
+                        } catch (e) {
+                            console.error('[wallet] call vm.didChanged() failed.', e);
+                        }
+                    }
+                    catch (e) {
+                        console.error('[wallet] query name failed.', e);
+                    }
+                    finally {
+                        this.statusLoadingDID = false;
+                    }
+                },
+                abbr: function (obj) {
+                    return window.abbr(obj);
+                },
+                gotoScanUrl: function () {
+                    window.open(window.scanUrl(this.account));
+                },
+                signMessage: async function (msg) {
+                    console.log('[wallet] request sign message: ' + msg);
+                    return await window.getWeb3Provider().getSigner().signMessage(msg);
+                },
+                accountChanged: function (accounts) {
+                    console.log('[wallet] account changed:', accounts.length === 0 ? null : accounts[0]);
+                    if (accounts.length === 0) {
+                        this.disconnected();
+                    } else {
+                        this.account = accounts[0];
+                        this.did = null;
+                        this.avatar = null;
+                        localStorage.setItem('__address__', this.account);
+                        console.log(`[wallet] connected: ${this.account}`);
+                        try {
+                            window.vm.accountChanged && window.vm.accountChanged(this.account);
+                        } catch (e) {
+                            console.error('[wallet] call vm.accountChanged() failed.', e);
+                        }
+                        try {
+                            window.vm.didChanged && window.vm.didChanged(null);
+                        } catch (e) {
+                            console.error('[wallet] call vm.didChanged() failed.', e);
+                        }
+                        this.queryName();
+                    }
+                },
+                disconnected: async function () {
+                    console.warn('[wallet] disconnected.');
+                    this.account = null;
+                    this.did = null;
+                    this.avatar = null;
+                    try {
+                        window.vm.accountChanged && window.vm.accountChanged(null);
+                    } catch (e) {
+                        console.error('[wallet] call vm.accountChanged(null) failed.', e);
+                    }
+                    try {
+                        window.vm.didChanged && window.vm.didChanged(null);
+                    } catch (e) {
+                        console.error('[wallet] call vm.didChanged() failed.', e);
+                    }
+                },
+                chainChanged: function (chainId) {
+                    console.log('[wallet] chain changed: ' + chainId + ' = ' + parseInt(chainId, 16));
+                    this.chainId = parseInt(chainId, 16);
+                    try {
+                        window.vm.chainChanged && window.vm.chainChanged(this.chainId);
+                    } catch (e) {
+                        console.error('[wallet] call vm.chainChanged() failed.', e);
+                    }
+                },
+                connectWallet: async function () {
+                    console.log('[wallet] try connect wallet...');
+                    if (window.getWeb3Provider() === null) {
+                        console.error('[wallet] there is no web3 provider.');
+                        return false;
+                    }
+                    try {
+                        this.accountChanged(await window.ethereum.request({
+                            method: 'eth_requestAccounts',
+                        }));
+                        this.chainChanged(await window.ethereum.request({
+                            method: 'eth_chainId'
+                        }));
+                        window.ethereum.on('disconnect', this.disconnected);
+                        window.ethereum.on('accountsChanged', this.accountChanged);
+                        window.ethereum.on('chainChanged', this.chainChanged);
+                    } catch (e) {
+                        console.error('[wallet] could not get a wallet connection.', e);
+                        return false;
+                    }
+                    return true;
+                },
+                switchChain: async function () {
+                    if (this.wrongNetwork) {
+                        await ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: '0x' + window.CHAIN_ID.toString(16) }],
+                        });
+                    }
+                }
+            },
+            mounted: async function () {
+                $('#wallet').css('display', 'flex');
+                // try connect wallet:
+                if (window.getWeb3Provider()) {
+                    if (localStorage.getItem('__address__')) {
+                        console.log('[wallet] try auto connect...');
+                        await this.connectWallet();
+                    }
+                }
+            }
+        });
+    }
+
+    $(function () {
+        // try init_vm:
+        if (window.init_vm) {
+            if (window.init_vm.constructor.name === 'AsyncFunction') {
+                window.init_vm()
+                    .catch((e) => {
+                        console.error('init vm failed.', e);
+                        init_wallet();
+                    })
+                    .then(() => {
+                        init_wallet();
+                    });
+            } else {
+                try {
+                    init_vm();
+                } catch (e) {
+                    console.error('init vm failed.', e);
+                }
+                init_wallet();
+            }
+        }
+    });
+</script>
+
+<div id="vm_wallet" class="container">
+    <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom"
+        style="position:fixed; top:0; left:0; right:0; z-index: 99;">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <img src="/assets/images/logo.svg" style="height:35px">
+                <span class="d-none d-md-inline">OpenDID</span>
+            </a>
+            <ul class="navbar-nav d-none d-lg-flex">
+                <form onsubmit="return doSearch(this)" action="/search.html" method="get">
+                    <span class="ps-2 pt-2 text-muted" style="position:absolute"><i class="bi bi-search"></i></span>
+                    <input id="q_top" name="q" type="search" maxlength="50" class="form-control"
+                        style="width:240px;padding-left:2em;" placeholder="Search name or address"
+                        data-i18n-placeholder:ja="名前または住所を検索" data-i18n-placeholder:zh="搜索名字或地址">
+                </form>
+            </ul>
+            <ul id="wallet" class="mr-2 navbar-nav navbar-right-wrap"
+                style="flex-direction: row !important; display:none">
+                <li v-show="statusLoadingDID" class="ms-2 nav-item">
+                    <div class="spinner-border spinner-border-sm" style="margin-top:12px"></div>
+                </li>
+                <li v-show="!statusLoadingDID && did" class="ms-2" style="display:inline-block">
+                    <a v-bind:href="'/name.html?name='+(did && did.name)" class="avatar">
+                        <div class="rounded-circle border border-1 d-block"
+                            style="margin-top: 5px;width:32px;height:32px;background-color:#fff;background-size:cover;"
+                            v-bind:style="{'background-image':'url('+(avatar||'/assets/images/user.svg')+')'}">
+                        </div>
+                    </a>
+                </li>
+                <li v-show="!statusLoadingDID && did" class="ms-2 nav-item">
+                    <a v-bind:href="'/name.html?name='+(did && did.name)" class="nav-link"
+                        v-bind:title="did && did.name" v-text="abbr(did && did.name)"></a>
+                </li>
+                <li v-show="!statusLoadingDID && did" class="ms-2 nav-item">
+                    <a href="/chat.html" class="nav-link" title="Chat with NoStr">
+                        <i class="bi bi-chat-square-text"></i>
+                    </a>
+                </li>
+                <li v-show="account!==null" class="ms-2 d-inline-block">
+                    <div class="d-flex flex-column">
+                        <div style="line-height: 20px;">
+                            <span v-if="chainId!==0 && !wrongNetwork" v-text="networkName"></span>
+                            <a v-if="chainId!==0 && wrongNetwork" v-on:click="switchChain" href="#0"
+                                class="text-danger">
+                                <span data-i18n:zh="不支持的鏈">Unsupported Chain</span>
+                                (<span v-text="chainId"></span>)
+                            </a>
+                        </div>
+                        <div style="line-height: 20px;">
+                            <a v-on:click="gotoScanUrl" href="#0" v-text="abbr(account)"></a>
+                        </div>
+                    </div>
+                </li>
+                <li v-if="account===null" class="ms-2 nav-item">
+                    <button v-on:click="connectWallet" type="button" class="btn btn-primary"
+                        data-i18n:en="Connect Wallet" data-i18n:ja="ウォレットを接続" data-i18n:ko="지갑 연결" data-i18n:zh="連接錢包">
+                    </button>
+                </li>
+                <li class="ms-2 nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#0" data-bs-toggle="dropdown">
+                        <i class="bi bi-translate"></i>
+                    </a>
+                    <ul id="i18n" class="dropdown-menu dropdown-menu-end" style="position: absolute;">
+                        <li><a class="dropdown-item" data-i18n-lang="en">English</a></li>
+                        <li><a class="dropdown-item" data-i18n-lang="ja">日本語</a></li>
+                        <li><a class="dropdown-item" data-i18n-lang="ko">한국어</a></li>
+                        <li><a class="dropdown-item" data-i18n-lang="zh">中文</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </nav>
+</div>
+<div style="height: 62px"><!-- placeholder --></div>
+
+    <div id="loading" class="container mt-4 mb-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="spinner-border">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="error" class="container mt-4 mb-4" style="display:none">
+        <div class="row">
+            <div class="col-12">
+                <span class="text-danger">Failed load DID by name.</span>
+                <a href="javascript:location.reload()">Retry</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="vm" class="container mt-4" style="display:none">
+        <div class="row mb-4">
+            <div class="col-12">
+                <!-- Bg -->
+                <div class="rounded-top"
+                    style="padding-top: 100px; background: url(/assets/images/bg.svg) no-repeat; background-size: cover;">
+                </div>
+                <div
+                    class="d-flex align-items-end justify-content-between bg-white px-4 pt-2 pb-4 rounded-none rounded-bottom shadow">
+                    <div class="d-flex align-items-center">
+                        <div class="me-2 ms-2 position-relative d-flex justify-content-end align-items-end"
+                            style="margin-top: -60px;">
+                            <div id="avatarImage" class="rounded-circle border border-4 border-white"
+                                style="display: block; width: 120px; height: 120px; background-color: #fff; background-size: cover;">
+                            </div>
+                        </div>
+                        <div class="lh-1">
+                            <h3 class="mb-3" v-text="did.name"></h3>
+                            <p class="mb-2"><span data-i18n:ja="オーナー" data-i18n:ko="소유자"
+                                    data-i18n:zh="所有者">Owner</span>: <a v-bind:href="scanUrl(did.owner)"
+                                    target="_blank">
+                                    <span v-text="abbr(did.owner)"></span>
+                                    <i class="bi bi-box-arrow-up-right"></i></a></p>
+                            <p class="mb-0">
+                                <span data-i18n:ja="ホームページ" data-i18n:ko="홈페이지" data-i18n:zh="主頁">Home</span>
+                                : <a v-bind:href="domainUrl(did.name)" target="_blank">
+                                    <span v-text="domain(did.name)"></span>
+                                    <i class="bi bi-box-arrow-up-right"></i></a>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12 col-lg-3 mb-4">
+                <div class="p-4 bg-white rounded shadow">
+                    <h6 class="mb-3 d-none d-lg-block" data-i18n:ja="設定" data-i18n:ko="설정" data-i18n:zh="設定">Settings
+                    </h6>
+                    <ul id="nav-settings" class="nav nav-pills">
+                        <li class="nav-item">
+                            <a v-on:click="selectTab('tabOverview')" v-bind:class="{'active':tab==='tabOverview'}"
+                                class="nav-link" href="#0">
+                                <i class="bi bi-house"></i>
+                                <span data-i18n:ja="概要" data-i18n:ko="개요" data-i18n:zh="概述">Overview</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a v-on:click="selectTab('tabRecords')" v-bind:class="{'active':tab==='tabRecords'}"
+                                class="nav-link" href="#0">
+                                <i class="bi bi-card-list"></i>
+                                <span data-i18n:ja="記録" data-i18n:ko="기록" data-i18n:zh="記錄">Records</span></a>
+                        </li>
+                        <li class="nav-item">
+                            <a v-on:click="selectTab('tabTransfer')" v-bind:class="{'active':tab==='tabTransfer'}"
+                                class="nav-link" href="#0">
+                                <i class="bi bi-arrow-left-right"></i>
+                                <span data-i18n:ja="移行" data-i18n:ko="옮기다" data-i18n:zh="轉移">Transfer</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-9 mb-4">
+                <div class="p-4 bg-white rounded shadow">
+                    <!-- overview -->
+                    <div id="tabOverview" v-show="tab==='tabOverview'">
+                        <h6 class="mb-3 pb-3 border-bottom">
+                            <i class="bi bi-house"></i>
+                            <span data-i18n:ja="概要" data-i18n:ko="개요" data-i18n:zh="概述">Overview</span>
+                        </h6>
+                        <dl class="row">
+                            <dt class="col-sm-3" data-i18n:ja="名前" data-i18n:ko="이름" data-i18n:zh="名字">Name</dt>
+                            <dd class="col-sm-9" v-text="did.name"></dd>
+
+                            <dt class="col-sm-3" data-i18n:ja="ホームページ" data-i18n:ko="홈페이지" data-i18n:zh="主頁">Home</dt>
+                            <dd class="col-sm-9"><a v-bind:href="domainUrl(did.name)" target="_blank">
+                                    <span v-text="domain(did.name)"></span>
+                                    <i class="bi bi-box-arrow-up-right"></i></a>
+                            </dd>
+
+                            <dt class="col-sm-3" data-i18n:ja="オーナー" data-i18n:ko="소유자" data-i18n:zh="所有者">Owner</dt>
+                            <dd class="col-sm-9"><a v-bind:href="scanUrl(did.owner)" target="_blank">
+                                    <span v-text="abbr(did.owner)"></span>
+                                    <i class="bi bi-box-arrow-up-right"></i></a>
+                            </dd>
+
+                            <dt class="col-sm-3">Registered Block</dt>
+                            <dd class="col-sm-9"><a v-bind:href="scanUrl(did.blockNumber)" target="_blank">
+                                    <span v-text="did.blockNumber"></span>
+                                    <i class="bi bi-box-arrow-up-right"></i></a>
+                            </dd>
+
+                            <dt class="col-sm-3">Registered TX</dt>
+                            <dd class="col-sm-9"><a v-bind:href="scanUrl(did.transactionHash)" target="_blank">
+                                    <span v-text="abbr(did.transactionHash)"></span>
+                                    <i class="bi bi-box-arrow-up-right"></i></a></dd>
+
+                            <dt class="col-sm-3">NFT ID</dt>
+                            <dd class="col-sm-9"><span id="spanTokenId" v-bind:title="did.id"
+                                    v-text="abbr(did.id)"></span>
+                                <a v-show="!statusCopied" v-on:click="copyText(did.id)" href="#0"><i
+                                        class="bi bi-clipboard"></i> Copy</a>
+                                <span v-show="statusCopied" class="text-success"><i class="bi bi-clipboard-check"></i>
+                                    Copied</span>
+                            </dd>
+
+                            <dt class="col-sm-3" data-i18n:ja="NFT画像" data-i18n:ko="NFT 이미지" data-i18n:zh="NFT圖像">NFT
+                                Image</dt>
+                            <dd class="col-sm-9"><img v-bind:src="image()" class="rounded" style="width: 80%;">
+                            </dd>
+                        </dl>
+                    </div>
+                    <!--// overview -->
+
+                    <!-- records -->
+                    <div id="tabRecords" v-show="tab==='tabRecords'">
+                        <h6 class="mb-3 pb-3 border-bottom">
+                            <i class="bi bi-card-list"></i>
+                            <span data-i18n:ja="記録" data-i18n:ko="기록" data-i18n:zh="記錄">Records</span>
+                        </h6>
+                        <table id="records" class="table">
+                            <thead>
+                                <tr>
+                                    <th style="width:90px" data-i18n:ja="ラベル" data-i18n:ko="상표" data-i18n:zh="標籤">Label
+                                    </th>
+                                    <th data-i18n:ja="コンテンツ" data-i18n:ko="콘텐츠" data-i18n:zh="內容">Content</th>
+                                    <th style="width:150px" data-i18n:ja="オペレーション" data-i18n:ko="작업" data-i18n:zh="操作">
+                                        Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="label in labels" v-bind:class="{'x-changed': isRecordChanged(label)}">
+                                    <td>
+                                        <span v-text="label.toUpperCase()"></span>
+                                    </td>
+                                    <td style="max-width:400px">
+                                        <span v-show="!records[label].editing"
+                                            v-text="records[label].content || not_set"
+                                            v-bind:class="{'text-muted':records[label].content==='', 'text-truncate':true}"
+                                            v-bind:title="records[label].content" style="display:block"></span>
+                                        <form v-show="records[label].editing">
+                                            <div v-show="records[label].prefix !== '' || records[label].postfix !== ''"
+                                                class="input-group input-group-sm">
+                                                <span v-show="records[label].prefix" v-text="records[label].prefix"
+                                                    class="input-group-text"></span>
+                                                <input v-model="records[label].edit"
+                                                    v-bind:placeholder="records[label].placeholder" type="text"
+                                                    length="100" class="form-control form-control-sm">
+                                                <button v-on:click="editByPostfix(label)"
+                                                    v-show="records[label].postfix" v-text="records[label].postfix"
+                                                    class="btn btn-outline-secondary" type="button"></button>
+                                            </div>
+                                            <input
+                                                v-show="records[label].prefix === '' && records[label].postfix === ''"
+                                                v-model="records[label].edit"
+                                                v-bind:placeholder="records[label].placeholder" type="text" length="100"
+                                                class="form-control form-control-sm">
+                                        </form>
+                                    </td>
+                                    <td>
+                                        <div v-show="canWriteContract">
+                                            <a v-show="!records[label].editing" v-on:click="startEditRecord(label)"
+                                                href="#0">
+                                                <i class="bi bi-pencil-square"></i> <span data-i18n:ja="編集"
+                                                    data-i18n:ko="편집하다" data-i18n:zh="編輯">Edit</span>
+                                            </a>
+                                            <a v-show="!records[label].editing && isRecordChanged(label)"
+                                                v-on:click="resetRecord(label)" href="#0" class="ms-2">
+                                                <i class="bi bi-arrow-counterclockwise"></i> <span data-i18n:ja="リセット"
+                                                    data-i18n:ko="초기화" data-i18n:zh="重置">Reset</span>
+                                            </a>
+                                            <a v-show="records[label].editing" v-on:click="doneEditRecord(label)"
+                                                href="#0"><i class="bi bi-check-circle"></i> <span>OK</span></a>
+                                            <a v-show="records[label].editing" v-on:click="cancelEditRecord(label)"
+                                                href="#0" class="ms-2">
+                                                <i class="bi bi-x-circle"></i> <span data-i18n:ja="キャンセル"
+                                                    data-i18n:ko="취소" data-i18n:zh="取消">Cancel</span>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <div v-show="canWriteContract" class="pe-4">
+                            <button v-on:click="updateRecords" v-bind:disabled="!statusCanUpdateRecords" type="button"
+                                class="float-end btn btn-outline-primary" data-i18n:ja="更新" data-i18n:ko="새롭게 하다"
+                                data-i18n:zh="更新">Update</button>
+                            <p>Please note that you must click "Update" to write updated records on blockchain.</p>
+                        </div>
+
+                        <div v-show="!canWriteContract" class="pt-3 pe-4">
+                            <div class="alert alert-warning">
+                                To update records, please connect your wallet and switch to owner address.
+                            </div>
+                        </div>
+                    </div>
+                    <!--// records -->
+
+                    <div id="tabTransfer" v-show="tab==='tabTransfer'">
+                        <h6 class="mb-3 pb-3 border-bottom">
+                            <i class="bi bi-arrow-left-right"></i>
+                            <span data-i18n:ja="移行" data-i18n:ko="옮기다" data-i18n:zh="轉移">Transfer</span>
+                        </h6>
+                        <p>The OpenDID name "<span v-text="did.name"></span>" is also a NFT which is owned by
+                            <a v-bind:href="scanUrl(did.owner)" target="_blank">
+                                <span v-text="abbr(did.owner)"></span>
+                                <i class="bi bi-box-arrow-up-right"></i>
+                            </a>.
+                        </p>
+                        <p>You can transfer owner of the NFT to change the owner of OpenDID name.</p>
+                        <p>If you want to sell your OpenDID name, you can list your name on
+                            <a v-bind:href="openSeaUrl()" target="_blank">
+                                OpenSea
+                                <i class="bi bi-box-arrow-up-right"></i>
+                            </a> and give it a fixed or bid price.
+                        </p>
+                        <p>Records are not changed after transfer or sold.</p>
+                        <h5>Direct Transfer</h5>
+                        <form v-show="canWriteContract" v-on:submit.prevent="transfer">
+                            <div class="mb-3">
+                                <label for="toAddress" class="form-label">Transfer to address:</label>
+                                <input v-model="transferTo" id="toAddress" placeholder="0x" type="text" length="42"
+                                    class="form-control">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label"><input v-model="acceptTransfer" type="checkbox" value="true"
+                                        class="form-check-input"> I understand, transfer this name.</label>
+                            </div>
+                            <div class="mb-3">
+                                <button v-bind:disabled="!acceptTransfer" type="submit"
+                                    class="btn btn-large btn-danger">
+                                    <i class="bi bi-arrow-left-right"></i>
+                                    <span data-i18n:ja="移行" data-i18n:ko="옮기다" data-i18n:zh="轉移">Transfer</span>
+                                </button>
+                            </div>
+                        </form>
+                        <div v-show="!canWriteContract" class="mt-3 mb-3">
+                            <div class="alert alert-warning">
+                                To transfer name, please connect your wallet and switch to
+                                owner address <span v-text="abbr(did.owner)"></span>.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- footer -->
+
+<div style="height: 65px"></div>
+
+<div id="footer" class="border-top"
+    style="position:fixed; bottom:0; left:0; right:0;background-color:#f5f4f8;z-index:99;">
+    <div class="container">
+        <div class="row g-0 pt-3 pb-4">
+            <!-- Desc -->
+            <div class="col-12 col-md-4 text-center text-md-start">
+                <a href="https://opendid.me" class="ms-2 me-2">opendid.me</a>
+                <a target="_blank" href="https://discord.opendid.me" class="text-muted ms-2 me-2">
+                    <i class="bi bi-discord"></i>
+                </a>
+                <a target="_blank" href="https://twitter.opendid.me" class="text-muted ms-2 me-2">
+                    <i class="bi bi-twitter"></i>
+                </a>
+                <a target="_blank" href="https://github.opendid.me" class="text-muted ms-2 me-2">
+                    <i class="bi bi-github"></i>
+                </a>
+            </div>
+            <!-- Links -->
+            <div class="d-none d-md-block col-md-8 text-center text-md-end">
+                <a href="#0" class="ms-2 me-2" data-i18n:ja="ドキュメント" data-i18n:ko="문서" data-i18n:zh="文檔">Docs</a>
+                <a href="#0" class="ms-2 me-2"
+                    onclick="window.open(scanUrl(window.CONTRACTS.registry.address))">Status</a>
+                <a href="#0" class="ms-2 me-2" data-i18n:ja="エアドロップ" data-i18n:ko="공중 투하" data-i18n:zh="空投">Airdrop</a>
+                <a href="https://polygonscan.com/token/0x7e3bc4768157284ec70d3cb6394822d54551e71e" class="ms-2 me-2"
+                    data-i18n:ja="ガバナンストークン" data-i18n:ko="거버넌스 토큰" data-i18n:zh="治理代幣">Governance Token</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!--// footer -->
+</body>
+
+</html>
