@@ -1,0 +1,14 @@
+[build]
+  publish = "public/"
+  command = "npm install"
+
+[functions]
+  directory = "netlify/functions/"
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/.well-known/nostr.json"
+  to = "/.netlify/functions/nip05"
+  status = 200
+  force = true
+  query = {name = ":name"}
