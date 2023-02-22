@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <!--#include file="inc/header.html"-->
+    <!--#include file="inc/global-css.html"-->
+    <!--#include file="inc/i18n-js.html"-->
+    <!--#include file="inc/global-js.html"-->
+
+    <script>
+        async function init_vm() {
+            console.log('init vm...');
+            let
+                did = null,
+                search = new URLSearchParams(location.search),
+                q = search.get('q') || '';
+            q = q.trim().toLowerCase();
+            try {
+                if (q) {
+                    did = await queryDID(q);
+                }
+            } catch (e) {
+                console.log('query failed.', e);
+                $('#error').show();
+            } finally {
+                $('#loading').hide();
+            }
+
+            window.vm = new Vue({
+                el: '#vm',
+                data: {
+                    account: null,
+                    name: q,
+                    q: q,
+                    did: did
+                },
+                computed: {
+                    canRegister: function () {
+                        return this.did === null && isValidName(this.name);
+                    },
+                    isInvalid: function () {
+                        return this.did === null && !isValidName(this.name);
+                    }
+                },
+                methods: {
+                    scanUrl: function (obj) {
+                        return window.scanUrl(obj);
+                    },
+                    abbr: function (obj) {
+                        return window.abbr(obj);
+                    },
+                    register: async function () {
+                        console.log('async register name...');
+                        if (!vm_wallet.ready) {
+                            return showAlert('Error', 'Please connect wallet first.');
+                        }
+                        let
+                            account = this.account,
+                            loading = null,
+                            confirms = 3,
+                            registry = new ethers.Contract(
+                                window.CONTRACTS.registry.address,
+                                window.CONTRACTS.registry.abi,
+                                window.getWeb3Provider().getSigner()),
+                            controller = new ethers.Contract(
+                                window.CONTRACTS.registerController.address,
+                                window.CONTRACTS.registerController.abi,
+                                window.getWeb3Provider().getSigner());
+                        try {
+                            loading = showLoading('Register', 'Prepare register...');
+                            let balanceOf = await registry.balanceOf(account);
+                            if (balanceOf > 0) {
+                                throw 'Cannot register for current address already own a name.';
+                            }
+                            loading.setMessage('Please sign the transaction to register name "' + this.name + '"...');
+                            let tx = await controller.register(this.name, { value: 0 });
+                            for (let i = 1; i <= confirms; i++) {
+                                loading.setMessage('Waiting for block confirms ' + i + '/' + confirms + '...');
+                                await tx.wait(i);
+                            }
+                            for (let i = 10; i > 0; i--) {
+                                loading.setMessage('Successfully registered name "' + this.name + '"! Refresh page after ' + i + ' seconds...');
+                                await sleep(1000);
+                            }
+                            location.assign('/name.html?name=' + this.name);
+
+                        } catch (err) {
+                            console.error(err);
+                            loading.close();
+                            showAlert('Error', translateError(err));
+                        }
+                    },
+                    accountChanged: function (account) {
+                        this.account = account;
+                    }
+                },
+                mounted: async function () {
+                    $('#vm').show();
+                }
+            });
+        }
+    </script>
+</head>
+
+<body>
+    <!--#include file="inc/dialog.html"-->
+    <!--#include file="inc/nav.html"-->
+
+    <div class="bg-primary pt-5 pb-5 mb-4">
+        <div class="container">
+            <div class="row">
+                <div class="col-12">
+                    <h1 class="text-white" data-i18n:ko="분산 ID, 절대 만료되지 않습니다." data-i18n:zh="去中心化ID，永不過期。">
+                        Decentralized ID, Never Expire.</h1>
+                    <p class="text-white fs-4 mt-4 mb-2">Unique name as your decentralized ID for wallets, websites, and
+                        more. Completely open and controlled by your private key.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loading" class="container mt-4 mb-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="spinner-border">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="error" class="container mt-4 mb-4" style="display:none">
+        <div class="row">
+            <div class="col-12">
+                <span class="text-danger">Failed query by name.</span>
+                <a href="javascript:location.reload()">Retry</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="vm" class="container" style="display:none">
+        <div class="row mb-4">
+            <div class="col-md-2"></div>
+            <div class="col-12 col-md-8 text-center">
+                <h1 class="mb-4">Register Your Name Now!</h1>
+                <form onsubmit="return doSearch(this)" action="/search.html" method="get">
+                    <div class="input-group mb-3">
+                        <input v-model="q" id="q_search" name="q" type="search" maxlength="50"
+                            class="form-control form-control-lg" placeholder="Search name or address">
+                        <button class="btn btn-outline-primary" type="submit"><i class="bi bi-search"></i></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="row mb-5">
+            <div class="col-md-4"></div>
+            <div class="col-12 col-md-6 p-4">
+                <div v-if="did!==null">
+                    <p>Sorry, name <span v-text="name" class="fw-bold"></span> is taken.</p>
+                </div>
+                <div v-if="isInvalid">
+                    <p class="text-danger">Sorry, name <span v-text="name" class="fw-bold"></span> is invalid.</p>
+                    <p>An OpenDID name must be:</p>
+                    <ul>
+                        <li>5 ~ 50 characters;</li>
+                        <li>by English letters and digits.</li>
+                    </ul>
+                </div>
+                <div v-if="canRegister">
+                    <p>Great! name <span v-text="name" class="fw-bold"></span> can be registered.</p>
+                    <button v-on:click="register" type="button" class="btn btn-lg btn-outline-primary">
+                        <i class="bi bi-arrow-right-circle"></i>
+                        <span>Register</span> <span v-text="name" class="fw-bold"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!--#include file="inc/footer.html"-->
+</body>
+
+</html>

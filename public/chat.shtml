@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <!--#include file="inc/header.html"-->
+    <!--#include file="inc/global-css.html"-->
+    <!--#include file="inc/i18n-js.html"-->
+    <!--#include file="inc/global-js.html"-->
+    <style>
+        #nav-chat {
+            display: block;
+            margin: 0;
+        }
+
+        #nav-chat a.nav-link {
+            padding: 0.3em 0.8em;
+            margin: 0.2em 0;
+            border-radius: 0;
+        }
+
+        #nav-chat a.active {
+            background-color: rgb(13, 110, 253) !important;
+        }
+
+        #nav-chat a.nav-link:hover {
+            background-color: rgba(13, 110, 253, 0.2);
+        }
+
+        #nav-chat a.text-danger:hover {
+            background-color: rgb(220, 53, 69);
+            color: #fff !important;
+        }
+
+        div.msg {
+            margin: 1rem 1rem 2rem 1rem;
+            position: relative;
+        }
+
+        div.msg>img {
+            width: 32px;
+            height: 32px;
+            float: left;
+        }
+
+        div.msg>div {
+            margin-left: 46px;
+        }
+    </style>
+    <script>
+
+        class Connection {
+            #relay;
+            #relay_url;
+            #ready;
+            #readyCallback;
+            #errorCallback;
+
+            constructor(relay_url, readyCallback, errorCallback) {
+                this.#relay_url = relay_url;
+                this.#relay = null;
+                this.#ready = false;
+                this.#readyCallback = readyCallback;
+                this.#errorCallback = errorCallback;
+            }
+
+            get url() {
+                return this.#relay_url;
+            }
+
+            get ready() {
+                return this.#ready;
+            }
+
+            connect() {
+                this.#relay = NostrTools.relayInit(this.#relay_url);
+                this.#relay.on('connect', () => {
+                    console.log('[relay] connected: ' + this.#relay_url);
+                    this.#ready = true;
+                    this.#readyCallback && this.#readyCallback();
+                });
+                this.#relay.on('error', () => {
+                    console.error('[relay] error: ' + this.#relay_url);
+                    this.#errorCallback && this.#errorCallback();
+                });
+            }
+
+            subscribe(ids, eventCallback) {
+                let sub = this.#relay.sub([{
+                    ids: ids
+                }]);
+                sub.on('event', event => {
+                    console.log('[relay] got event: ', event);
+                    eventCallback(event);
+                });
+                sub.on('eose', () => {
+                    sub.unsub();
+                });
+            }
+
+            publish(event, successCallback, errorCallback) {
+                let pub = this.#relay.publish(event);
+                pub.on('ok', () => {
+                    console.log(`[relay.pub] ${event.id} pub ok via ${this.#relay_url}`);
+                });
+                pub.on('failed', (reason) => {
+                    console.error(`[relay.pub] ${event.id} pub failed for ${reason}, via ${this.#relay_url}`);
+                });
+            }
+        }
+
+        class Contact {
+            npub;
+            relay_url;
+            petname;
+
+            constructor(npub, relay_url, petname) {
+                this.npub = npub;
+                this.relay_url = relay_url;
+                this.petname = petname;
+            }
+        }
+
+        class Channel {
+            name;
+            about;
+            picture;
+
+            constructor(name, about, picture) {
+                this.name = name;
+                this.about = about;
+                this.picture = picture;
+            }
+        }
+
+        class Message {
+            sender;
+            content;
+            timestamp;
+            created_at;
+
+            constructor(sender, content, timestamp) {
+                this.sender = sender;
+                this.content = content;
+                this.timestamp = timestamp;
+                this.created_at = new Date(timestamp * 1000).toLocaleString();
+            }
+        }
+
+        window.EVENTS = {
+            SET_METADATA: 0,
+            TEXT_NOTE: 1,
+            RECOMMEND_SERVER: 2,
+            CONTACT_LIST: 3,
+            DELETE: 5,
+
+        }
+
+        window.PUBLIC_RELAYS = [
+            'wss://relay.damus.io',
+            'wss://relay.nostr.info',
+            'wss://nostr-pub.wellorder.net',
+            'wss://nostr.bitcoiner.social',
+            'wss://nostr.zebedee.cloud',
+            'wss://nostr.swiss-enigma.ch',
+            'wss://nostr.drss.io',
+            'wss://nostr.onsats.org',
+            'wss://nostr.zaprite.io',
+            'wss://relay.nostr.ch',
+            'wss://nostr.mom',
+            'wss://nostr-relay.alekberg.net',
+            'wss://relay.snort.social',
+            'wss://nostr.cercatrova.me',
+            'wss://nostr.semisol.dev',
+            'wss://nostr.oxtr.dev',
+            'wss://nostr.sandwich.farm',
+            'wss://nostr.developer.li'
+        ];
+
+        function init_vm() {
+            console.log('init vm...');
+            window.vm = new Vue({
+                el: '#vm',
+                data: {
+                    account: null,
+                    did: null,
+                    displayName: '',
+                    nsec: null,
+                    npub: null,
+                    npubEncode: null,
+                    statusNostrNotSet: false,
+                    statusNostrNotMatch: false,
+                    idleRelays: Arrays(...window.PUBLIC_RELAYS),
+                    usedRelays: [],
+                    connections: [],
+                    messages: [
+                        new Message('vector', 'Hello', Date.now() / 1000 - 122000),
+                        new Message('Greenwood', 'Hello World', Date.now() / 1000 - 12200),
+                        new Message('bill', 'Welcome to web3!', Date.now() / 1000 - 1220),
+                        new Message('Doggie', 'ETH2 merge is coming in 3 month! just wait! eth price to the moon!', Date.now() / 1000 - 122),
+                        new Message('CJ_sec', 'hehe ~ hehe', Date.now() / 1000 - 120),
+                    ],
+                    inputMessage: '',
+                    version: 0
+                },
+                computed: {
+                },
+                methods: {
+                    readyConnections: function () {
+                        let r = 0;
+                        for (let conn of this.connections) {
+                            if (conn.ready()) {
+                                r++;
+                            }
+                        }
+                        return r;
+                    },
+                    tryConnect: function () {
+                        if (this.connections.length >= 5) {
+                            return;
+                        }
+                        let url = this.idleRelays.shift();
+                        this.usedRelays.push(url);
+                        let conn = new Connection(url, () => {
+                        }, () => {
+                            let index = this.usedRelays.indexOf(url);
+                            this.usedRelays.splice(index, 1);
+                            this.idleRelays.push(url);
+                        });
+                        connections.push(conn);
+                    },
+                    onEvent: function (event) {
+                        console.log('[event]', event);
+                    },
+                    createEvent: function (kind, content, tags) {
+                        if (!tags) {
+                            tags = [];
+                        }
+                        let event = {
+                            kind: kind,
+                            pubkey: this.npub,
+                            created_at: Math.floor(Date.now() / 1000),
+                            tags: tags,
+                            content: content
+                        };
+                        event.id = NostrTools.getEventHash(event);
+                        event.sig = NostrTools.signEvent(event, this.nsec);
+                    },
+                    exportNsec: function () {
+                        let that = this;
+                        showConfirm('Warning', 'nsec is your private key of nostr protocol. Make sure only used in trusted nostr app. Copy nsec to clipboard?', function () {
+                            copyText(NostrTools.nip19.nsecEncode(that.nsec), function () {
+                                showTip('NOTE: your nsec is copied to clipboard.');
+                            });
+                        });
+                    },
+                    copyNpub: function () {
+                        copyText(this.npubEncode, function () {
+                            showTip('Your npub is copied to clipboard.');
+                        });
+                    },
+                    abbr: function (obj) {
+                        return window.abbr(obj);
+                    },
+                    signout: function () {
+                        console.log('[chat] clear nsec and all...');
+                        this.nsec = null;
+                        this.npub = null;
+                        this.npubEncode = null;
+                        this.displayName = '';
+                    },
+                    accountChanged: function (account) {
+                        this.account = account;
+                    },
+                    didChanged: async function (did) {
+                        if (this.nsec) {
+                            console.error('[chat] already init. skip re-init.');
+                            return;
+                        }
+                        this.did = did;
+                        if (did) {
+                            console.log(`[chat] set did to ${did.name}`);
+                        }
+                    },
+                    sign: async function () {
+                        if (this.did !== null && this.account !== null) {
+                            let sig = await vm_wallet.signMessage('nostr:' + ethers.utils.getAddress(this.account));
+                            let
+                                nsec = sig.substring(2, 66),
+                                npub = NostrTools.getPublicKey(nsec),
+                                npubEncode = NostrTools.nip19.npubEncode(npub),
+                                nostr = getDIDRecord(this.did, 'nostr');
+                            if (nostr === null) {
+                                console.warn(`[chat] nostr record not set for did ${this.did.name}`);
+                                this.statusNostrNotSet = true;
+                            } else {
+                                if (nostr !== npubEncode) {
+                                    console.warn(`[chat] nostr record not match for did ${this.did.name}`);
+                                    this.statusNostrNotMatch = true;
+                                }
+                            }
+                            this.nsec = nsec;
+                            this.npub = npub;
+                            this.npubEncode = npubEncode;
+                            this.displayName = this.did.name;
+                        }
+                    }
+                },
+                mounted: async function () {
+                }
+            });
+        }
+    </script>
+</head>
+
+<body>
+    <!--#include file="inc/dialog.html"-->
+    <!--#include file="inc/nav.html"-->
+
+    <div id="loading" class="container" style="display:none">
+        <div class="row mt-4 mb-4">
+            <div class="col-12">
+                <div class="spinner-border">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="vm" style="width: 100vw; height: calc(100% - 127px); position:fixed;">
+        <div id="chat" class="container d-flex flex-row" style="height:100%;">
+            <div class="border-end" style="width:160px; height:100%; overflow-y:scroll;overflow-x: hidden;">
+                <div id="userInfo" v-show="npub" class="m-2">
+                    <div class="text-truncate">
+                        <img src="/assets/images/user.svg" style="height:24px; margin-top:-6px;">
+                        <span class="fs-5" style="line-height:32px">Universe xxxxx</span>
+                    </div>
+                    <div class="mb-2 text-truncate" style="font-size:14px">
+                        <span v-text="npubEncode"></span>
+                    </div>
+                    <div class="mb-3" style="font-size:14px">
+                        <a href="#0" v-on:click="copyNpub">
+                            <i class="bi bi-clipboard"></i>
+                            <span>Copy NPUB</span>
+                        </a>
+                        <br>
+                        <a class="text-danger" href="#0" v-on:click="exportNsec">
+                            <i class="bi bi-box-arrow-right"></i>
+                            <span>Export NSEC</span>
+                        </a>
+                    </div>
+                </div>
+                <div v-show="statusNostrNotMatch" class="m-2">
+                    <span class="text-danger" style="font-size:14px">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        Your nostr record is not set correct for
+                        OpenDID.</span> <a href="#0">Fix</a>
+                </div>
+                <div v-show="statusNostrNotSet" class="m-2">
+                    <span class="text-muted" style="font-size:14px">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Your nostr record is not set for
+                        OpenDID.</span> <a href="#0">Fix</a>
+                </div>
+                <div v-show="npub===null" class="m-3">
+                    <div v-show="account===null || did===null" class="text-danger" style="font-size:14px">
+                        Please connect wallet with OpenDID account.
+                    </div>
+                    <div v-show="account!==null && did!==null">
+                        <button v-on:click="sign" class="btn btn-lg btn-success" style="width:100%">Login</button>
+                    </div>
+                </div>
+                <ul id="nav-chat" class="mb-4 nav nav-pills">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#0">
+                            <i class="bi bi-globe"></i>
+                            Global
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#0">
+                            <i class="bi bi-people"></i>
+                            OpenDID</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-truncate" href="#0">
+                            <i class="bi bi-people"></i>
+                            NoStr Protocol Discussion</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-truncate" href="#0">
+                            <i class="bi bi-person-check"></i>
+                            Green</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-truncate" href="#0">
+                            <i class="bi bi-person"></i>
+                            npub1k2hepo3d29fi8hepo3d29fi39</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-truncate" href="#0">
+                            <i class="bi bi-person"></i>
+                            npub1pec1x4hepo3d29fido1</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#0">
+                            <i class="bi bi-person-check"></i>
+                            JK.op</a>
+                    </li>
+                    <hr>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#0">
+                            <i class="bi bi-gear-wide-connected"></i>
+                            Config</a>
+                    </li>
+                    <li v-show="npub" class="nav-item">
+                        <hr>
+                        <a class="nav-link text-danger" href="#0" v-on:click="signout">
+                            <i class="bi bi-power"></i>
+                            Sign Out</a>
+                    </li>
+                    <hr>
+                </ul>
+                <!-- status -->
+                <div class="m-3">
+                    <div class="text-truncate"><i class="bi bi-check-circle-fill text-success"></i> 3 relays connected
+                    </div>
+                </div>
+            </div>
+            <div class="flex-grow-1" style="width:calc(100%-150px); height:100%; overflow: hidden;">
+                <div style="height:100%; position:relative;">
+                    <div
+                        style="position:absolute; left:0; right:0; top:0; height:calc(100% - 220px); overflow-x:hidden; overflow-y:scroll;">
+                        <!-- message list -->
+                        <div v-for="m in messages" class="msg">
+                            <img src="/assets/images/user.svg">
+                            <div>
+                                <div class="sender"><span v-text="m.sender"></span> - <span
+                                        v-text="m.created_at"></span>
+                                </div>
+                                <div class="content" v-text="m.content"></div>
+                            </div>
+                        </div>
+                        <!--// message list -->
+                    </div>
+                    <div class="border-top"
+                        style="position:absolute; left:0; right:0; bottom:0; width:100%; height:220px;">
+                        <div>
+                            <div class="m-2">
+                                <div class="mb-2">
+                                    <textarea v-model="inputMessage" rows="6" class="form-control"
+                                        placeholder="Type something" style="width: 100%; resize: none;"></textarea>
+                                </div>
+                                <div>
+                                    <button v-bind:disabled="npub===null || inputMessage.trim()===''" type="button"
+                                        class="btn btn-sm btn-primary" data-i18n:ja="送る" data-i18n:ko="보내다"
+                                        data-i18n:zh="發送">Send</button>
+                                    <span v-text="displayName || '(not login)'"></span>
+                                    -
+                                    <span v-text="abbr(npubEncode) || '(no npub)'"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!--#include file="inc/footer.html"-->
+</body>
+
+</html>

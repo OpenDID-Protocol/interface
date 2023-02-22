@@ -1,0 +1,195 @@
+<script>
+    // global vars:
+    class Contract {
+        address;
+        abi;
+
+        constructor(address, abi) {
+            this.address = address;
+            this.abi = abi;
+        }
+    }
+
+    const isTestnet = location.hostname.endsWith('opendid-testnet.me') || location.hostname === 'localhost';
+
+    let
+        registryAddress = '0x5dA568a00E2007Bb99eE808828253C1eE7d9Bcb1',
+        bindControllerAddress = '0x928191B94159f03C7338d188885Cd6B808025a02',
+        registerControllerAddress = isTestnet ? '0x0C45882D25eeeFE4F36AE29ed50bd53E7d9Ef313' : '0x';
+
+    window.CHAIN_ID = isTestnet ? 80001 : 137;
+    window.CHAIN_NAME = isTestnet ? 'Polygon Testnet' : 'Polygon';
+    window.DOMAIN = isTestnet ? 'opendid-testnet.me' : 'opendid.me';
+    window.SCAN_URL = isTestnet ? 'https://mumbai.polygonscan.com' : 'https://polygonscan.com';
+    window.OPENSEA_URL = isTestnet ? 'https://testnets.opensea.io' : 'https://opensea.io';
+    window.OPENSEA_ASSET_URL = isTestnet ? 'https://testnets.opensea.io/assets/mumbai/' + registryAddress + '/' : 'https://opensea.io/assets/matic/' + registryAddress + '/';
+    window.GRAPH_URL = 'https://api.thegraph.com/subgraphs/name/opendid-protocol/' + (isTestnet ? 'testnet' : 'mainnet')
+
+    window.CONTRACTS = {
+        'registry': new Contract(registryAddress, '[{"inputs":[{"internalType":"string[]","name":"_names","type":"string[]"}],"name":"batchLookup","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address[]","name":"registrants","type":"address[]"}],"name":"batchReverseLookup","outputs":[{"internalType":"string[]","name":"","type":"string[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"labels","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"string","name":"name","type":"string"}],"name":"lookup","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ownerOf","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"string","name":"label","type":"string"}],"name":"queryRecord","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"string[]","name":"_labels","type":"string[]"}],"name":"queryRecords","outputs":[{"internalType":"string[]","name":"","type":"string[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"registrant","type":"address"}],"name":"reverseLookup","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"balance","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"safeTransferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"transferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"}]'),
+        'bindController': new Contract(bindControllerAddress, '[{ "inputs": [{ "internalType": "uint256", "name": "tokenId", "type": "uint256" }, { "internalType": "string[]", "name": "labels", "type": "string[]" }, { "internalType": "string[]", "name": "values", "type": "string[]" }], "name": "batchBind", "outputs": [], "stateMutability": "nonpayable", "type": "function" }]'),
+        'registerController': new Contract(registerControllerAddress, '[{"inputs":[{"internalType":"string","name":"name","type":"string"}],"name":"register","outputs":[],"stateMutability":"payable","type":"function"}]')
+    };
+
+    // did name pattern:
+    function isValidName(name) {
+        return /^[a-z0-9]{5,50}$/.test(name.toLowerCase());
+    }
+
+    function doSearch(formObject) {
+        let
+            $q = $(formObject).find('input[name=q]'),
+            q = $q.val().trim();
+        if (q) {
+            $q.removeClass('is-invalid');
+            return true;
+        }
+        $q.addClass('is-invalid');
+        return false;
+    }
+
+    async function sleep(ms) {
+        return new Promise(resolve => {
+            setTimeout(resolve, ms);
+        });
+    }
+
+    function abbr(obj) {
+        if (obj === null) {
+            return '';
+        }
+        if (ethers.utils.isAddress(obj)) {
+            let s = ethers.utils.getAddress(obj);
+            return s.substring(0, 6) + '...' + s.substring(38);
+        }
+        if (ethers.utils.isHexString(obj) && obj.length === 66) {
+            return obj.substring(0, 6) + '...' + obj.substring(62);
+        }
+        if (typeof obj === 'string') {
+            if (obj.startsWith('npub1') && obj.length > 13) {
+                return obj.substring(0, 9) + '...' + obj.substring(obj.length - 4);
+            }
+            if (obj.length > 10) {
+                return obj.substring(0, 10) + '...';
+            }
+        }
+        return obj
+    }
+
+    function scanUrl(obj) {
+        if (ethers.utils.isAddress(obj)) {
+            return window.SCAN_URL + '/address/' + obj;
+        }
+        if (ethers.utils.isHexString(obj) && obj.length === 66) {
+            return window.SCAN_URL + '/tx/' + obj;
+        }
+        if (typeof obj === 'number' || /^[0-9]{1,20}$/.test(obj)) {
+            return window.SCAN_URL + '/block/' + obj;
+        }
+        return window.SCAN_URL;
+    }
+
+    function copyText(s, callback) {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(s);
+            callback && callback();
+        } else {
+            console.warn('navigator.clipboard not supported.');
+            let textarea = document.createElement('textarea');
+            document.body.appendChild(textarea);
+            textarea.style.position = 'fixed';
+            textarea.style.clip = 'rect(0 0 0 0)';
+            textarea.style.top = '10px';
+            textarea.value = s;
+            textarea.select();
+            document.execCommand('copy', true);
+            document.body.removeChild(textarea);
+            callback && callback();
+        }
+    }
+
+    function isMobile() {
+        return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    }
+
+    function getWeb3Provider() {
+        if (!window.web3Provider) {
+            if (!window.ethereum) {
+                console.error("there is no web3 provider.");
+                return null;
+            }
+            window.web3Provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+        }
+        return window.web3Provider;
+    }
+
+    function translateError(err) {
+        window.err = err;
+        if (typeof (err) === 'string') {
+            return err;
+        }
+        if (err.error && err.error.code && err.error.message) {
+            return `Error (${err.error.code}): ${err.error.message}`;
+        }
+        if (err.code && err.message) {
+            return `Error (${err.code}): ${err.message}`;
+        }
+        return err.message || err.toString();
+    }
+
+    async function postJSON(url, data) {
+        let opt = {
+            type: 'POST',
+            dataType: 'json',
+            contentType: 'application/json',
+            url: url,
+            data: JSON.stringify(data)
+        };
+        return await $.ajax(opt);
+    }
+
+    async function queryGraph(query) {
+        return await postJSON(window.GRAPH_URL, query);
+    }
+
+    async function queryDID(nameOrAddr) {
+        let
+            where = ethers.utils.isAddress(nameOrAddr) ? `owner: "${nameOrAddr}"` : `name: "${nameOrAddr}"`,
+            query = {
+                query: `
+{
+    names(where: { ${where} }) {
+        id
+        name
+        owner
+        blockNumber
+        transactionHash
+        records {
+            label
+            content
+        }
+    }
+}
+`
+            };
+        console.log(`[did] start query by ${nameOrAddr}`);
+        let resp = await queryGraph(query);
+        if (resp.data.names.length > 0) {
+            let did = resp.data.names[0];
+            console.log(`[did] name found: ${did.name}`);
+            return did;
+        }
+        return null;
+    }
+
+    function getDIDRecord(did, label) {
+        if (did.records) {
+            for (let r of did.records) {
+                if (r.label === label) {
+                    return r.content;
+                }
+            }
+        }
+        return null;
+    }
+</script>

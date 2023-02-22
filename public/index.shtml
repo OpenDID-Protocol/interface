@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <!--#include file="inc/header.html"-->
+    <!--#include file="inc/global-css.html"-->
+    <!--#include file="inc/i18n-js.html"-->
+    <!--#include file="inc/global-js.html"-->
+
+    <script>
+        function init_vm() {
+            console.log('init vm...');
+            window.vm = new Vue({
+                el: '#vm',
+                data: {
+                    account: null,
+                    recentNames: [],
+                    statusLoadingRecentNames: false,
+                    statusLoadErrorRecentNames: false,
+                    version: 0
+                },
+                computed: {
+                    canSetMe: function () {
+                        return this.account !== null;
+                    }
+                },
+                methods: {
+                    scanUrl: function (obj) {
+                        return window.scanUrl(obj);
+                    },
+                    abbr: function (obj) {
+                        return window.abbr(obj);
+                    },
+                    loadRecentNames: async function () {
+                        console.log('async search recent names...');
+                        this.statusLoadingRecentNames = true;
+                        this.statusLoadErrorRecentNames = false;
+                        this.recentNames = [];
+                        let query = {
+                            "query": `
+{
+    names(first: 20, orderBy: blockTimestamp, orderDirection: desc) {
+        id
+        name
+        owner
+    }
+}`
+                        };
+                        try {
+                            let result = await queryGraph(query);
+                            this.recentNames = result.data.names;
+                        } catch (err) {
+                            console.error('load error', err);
+                            this.statusLoadErrorRecentNames = true;
+                        } finally {
+                            this.statusLoadingRecentNames = false;
+                        }
+                    },
+                    accountChanged: function (account) {
+                        this.account = account;
+                    }
+                },
+                mounted: async function () {
+                    await this.loadRecentNames();
+                }
+            });
+        }
+    </script>
+</head>
+
+<body>
+    <!--#include file="inc/dialog.html"-->
+    <!--#include file="inc/nav.html"-->
+
+    <div class="bg-primary pt-5 pb-5 mb-4">
+        <div class="container">
+            <div class="row">
+                <div class="col-12">
+                    <h1 class="text-white" data-i18n:ja="分散型 ID、無期限。" data-i18n:ko="분산 ID, 절대 만료되지 않습니다."
+                        data-i18n:zh="去中心化ID，永不過期。">
+                        Decentralized ID, Never Expire.</h1>
+                    <p class="text-white fs-4 mt-4 mb-2"
+                        data-i18n:ja="ウォレット、ウェブサイトなどの分散IDとしての一意の名前。完全に公開され、秘密鍵によって制御されます。"
+                        data-i18n:ko="지갑, 웹사이트 등에 대한 분산 ID로 고유한 이름입니다. 개인 키에 의해 완전히 개방되고 제어됩니다."
+                        data-i18n:zh="作為錢包、網站等的去中心化ID的唯一名字。完全開放，由您的私鑰控制。">Unique name
+                        as your decentralized ID for wallets, websites, and
+                        more. Completely open and controlled by your private key.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="vm" class="container">
+        <div class="row mb-4">
+            <div class="col-md-2"></div>
+            <div class="col-12 col-md-8 text-center">
+                <h1 class="mb-4" data-i18n:ja="今すぐあなたの名前を登録してください！" data-i18n:ko="지금 귀하의 이름을 등록하십시오!"
+                    data-i18n:zh="立即註冊您的名字！">Register Your Name Now!</h1>
+                <form onsubmit="return doSearch(this)" action="/search.html" method="get">
+                    <div class="input-group mb-3">
+                        <input id="q_search" name="q" value="" type="search" maxlength="50"
+                            class="form-control form-control-lg" placeholder="Search name or address">
+                        <button class="btn btn-outline-primary" type="submit"><i class="bi bi-search"></i></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="row mb-5">
+            <div class="col-12 text-center">
+                <h4 class="mb-3">Recent Registerd Names</h4>
+                <div v-show="!statusLoadingRecentNames && !statusLoadErrorRecentNames" v-for="name in recentNames"
+                    class="mb-2">
+                    <a v-bind:href="'/name.html?name=' + name.name" v-text="name.name"></a>
+                    by
+                    <a v-bind:href="scanUrl(name.owner)" target="_blank"><span v-text="abbr(name.owner)"></span>
+                        <i class="bi bi-box-arrow-up-right"></i></a>
+                </div>
+                <div v-show="statusLoadingRecentNames">
+                    <div class="spinner-border">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div v-show="statusLoadErrorRecentNames">
+                    <span>Failed loading recent names.</span>
+                    <a href="#0" v-on:click="loadRecentNames">Retry</a>
+                </div>
+            </div>
+        </div>
+        <div class="row mb-4">
+            <div class="col-12 col-md-4">
+                <h4 class="mb-2">DID Name</h4>
+                <p>Register your DID name unqiue and permanant, as your Web3 identity.</p>
+            </div>
+            <div class="col-12 col-md-4">
+                <h4 class="mb-2">Bind Record</h4>
+                <p>Bind your crypto address, email, Twitter, GitHub, etc.</p>
+            </div>
+            <div class="col-12 col-md-4">
+                <h4 class="mb-2">Compatible with DNS</h4>
+                <p>OpenDID works fully compatible with DNS.</p>
+            </div>
+        </div>
+    </div>
+
+    <!--#include file="inc/footer.html"-->
+</body>
+
+</html>

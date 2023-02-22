@@ -1,0 +1,129 @@
+<script>
+    /**************************************** 
+    
+    Find i18n languages from:
+    
+    <any id="i18n">
+        <a class="dropdown-item" data-i18n-lang="en" href="#0">English</a>
+        <a data-i18n-lang="ja">日本語</a>
+        <a data-i18n-lang="ko">한국어</a>
+        <a data-i18n-lang="zh">中文</a>
+    </any>
+    
+    ****************************************/
+
+    function initI18N() {
+        window.I18N_ATTRIBUTES = ['title', 'placeholder'];
+        window.LANGUAGES = [];
+        $('#i18n a[data-i18n-lang]').each(function () {
+            let
+                $a = $(this),
+                lang = $a.attr('data-i18n-lang');
+            if (lang) {
+                console.log(`[i18n] found language: ${lang}`);
+                window.LANGUAGES.push(lang);
+                $a.attr('href', 'javascript:setI18N(\'' + lang + '\')');
+            }
+        });
+        if (window.LANGUAGES.length === 0) {
+            console.warn('[i18n] i18n is not enabled.');
+            return;
+        }
+        let defaultLang = window.LANGUAGES[0];
+        console.log(`[i18n] default language: ${defaultLang}`);
+
+        $('*').each(function () {
+            let
+                $c = $(this),
+                el = $c.get(0),
+                attrNames = el.getAttributeNames(),
+                attrDefaults,
+                props = window.I18N_ATTRIBUTES,
+                i18nTextEnabled = false,
+                i18nPropsEnabled = Array(props.length).fill(false),
+                i, prop, value;
+            for (let lang of window.LANGUAGES) {
+                if (attrNames.indexOf('data-i18n:' + lang) >= 0) {
+                    i18nTextEnabled = true;
+                }
+                for (i = 0; i < props.length; i++) {
+                    prop = props[i];
+                    if (attrNames.indexOf('data-i18n-' + prop + ':' + lang) >= 0) {
+                        i18nPropsEnabled[i] = true;
+                    }
+                }
+            }
+            if (i18nTextEnabled) {
+                if (attrNames.indexOf('data-i18n:' + defaultLang) < 0) {
+                    value = $c.text() || '';
+                    $c.attr('data-i18n:' + defaultLang, value);
+                    console.log(`[i18n] auto add: ${defaultLang} = ${value}`);
+                }
+            }
+            for (i = 0; i < props.length; i++) {
+                prop = props[i];
+                if (i18nPropsEnabled[i]) {
+                    let defaultAttr = 'data-i18n-' + prop + ':' + defaultLang;
+                    if (attrNames.indexOf(defaultAttr) < 0) {
+                        value = $c.attr(prop) || '';
+                        $c.attr(defaultAttr, value);
+                        console.log(`[i18n] auto add ${prop}: ${defaultLang} = ${value}`);
+                    }
+                }
+            }
+        });
+
+        let prefer = null;
+        for (let navLang of navigator.languages) {
+            for (let appLang of window.LANGUAGES) {
+                if (navLang.startsWith(appLang)) {
+                    prefer = prefer || appLang;
+                    console.log(`[i18n] detect preferred language: ${prefer}`);
+                    break;
+                }
+            }
+        }
+        setI18N(localStorage.getItem('__i18n__') || prefer || defaultLang);
+    }
+
+    function setI18N(lang) {
+        console.log(`[i18n] switch to ${lang}`);
+        if (window.LANGUAGES.indexOf(lang) < 0) {
+            console.error(`[i18n] invalid language: ${lang}`);
+            return;
+        }
+        localStorage.setItem('__i18n__', lang);
+        let
+            defaultLang = window.LANGUAGES[0],
+            textPrefix = 'data-i18n:' + lang,
+            defaultTextPrefix = 'data-i18n:' + defaultLang,
+            props = window.I18N_ATTRIBUTES;
+        $('*').each(function () {
+            let
+                $c = $(this),
+                el = $c.get(0),
+                attrNames = el.getAttributeNames(),
+                attrValue;
+            // set Text:
+            let textValue = el.getAttribute(textPrefix) || el.getAttribute(defaultTextPrefix) || '';
+            if (textValue) {
+                console.log(`[i18n] set ${lang} = ${textValue}`);
+                $c.text(textValue);
+            }
+            // set properties:
+            for (let prop of props) {
+                let
+                    propPrefix = 'data-i18n-' + prop + ':',
+                    propValue = el.getAttribute(propPrefix + lang) || el.getAttribute(propPrefix + defaultLang) || '';
+                if (propValue) {
+                    console.log(`[i18n] set attr ${prop} = ${propValue}`);
+                    $c.attr(prop, propValue);
+                }
+            }
+        });
+    }
+
+    $(function () {
+        initI18N();
+    });
+</script>

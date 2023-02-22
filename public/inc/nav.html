@@ -1,0 +1,250 @@
+<script>
+    function init_wallet() {
+        console.log('init wallet...');
+        window.vm_wallet = new Vue({
+            el: '#vm_wallet',
+            data: {
+                account: null,
+                chainId: 0,
+                statusLoadingDID: false,
+                did: null,
+                avatar: null
+            },
+            computed: {
+                ready: function () {
+                    return this.account && this.chainId === window.CHAIN_ID;
+                },
+                networkName: function () {
+                    return window.CHAIN_NAME;
+                },
+                wrongNetwork: function () {
+                    return this.chainId !== window.CHAIN_ID;
+                }
+            },
+            methods: {
+                queryName: async function () {
+                    let addr = this.account;
+                    this.statusLoadingDID = true;
+                    try {
+                        let did = await queryDID(addr);
+                        if (addr !== this.account) {
+                            console.warn('[wallet] query result outdated for account changed.');
+                        }
+                        if (did) {
+                            console.log(`[wallet] name found: ${did.name}`);
+                        }
+                        this.did = did;
+                        this.avatar = did && getDIDRecord(did, 'avatar');
+                        try {
+                            window.vm.didChanged && window.vm.didChanged(this.did);
+                        } catch (e) {
+                            console.error('[wallet] call vm.didChanged() failed.', e);
+                        }
+                    }
+                    catch (e) {
+                        console.error('[wallet] query name failed.', e);
+                    }
+                    finally {
+                        this.statusLoadingDID = false;
+                    }
+                },
+                abbr: function (obj) {
+                    return window.abbr(obj);
+                },
+                gotoScanUrl: function () {
+                    window.open(window.scanUrl(this.account));
+                },
+                signMessage: async function (msg) {
+                    console.log('[wallet] request sign message: ' + msg);
+                    return await window.getWeb3Provider().getSigner().signMessage(msg);
+                },
+                accountChanged: function (accounts) {
+                    console.log('[wallet] account changed:', accounts.length === 0 ? null : accounts[0]);
+                    if (accounts.length === 0) {
+                        this.disconnected();
+                    } else {
+                        this.account = accounts[0];
+                        this.did = null;
+                        this.avatar = null;
+                        localStorage.setItem('__address__', this.account);
+                        console.log(`[wallet] connected: ${this.account}`);
+                        try {
+                            window.vm.accountChanged && window.vm.accountChanged(this.account);
+                        } catch (e) {
+                            console.error('[wallet] call vm.accountChanged() failed.', e);
+                        }
+                        try {
+                            window.vm.didChanged && window.vm.didChanged(null);
+                        } catch (e) {
+                            console.error('[wallet] call vm.didChanged() failed.', e);
+                        }
+                        this.queryName();
+                    }
+                },
+                disconnected: async function () {
+                    console.warn('[wallet] disconnected.');
+                    this.account = null;
+                    this.did = null;
+                    this.avatar = null;
+                    try {
+                        window.vm.accountChanged && window.vm.accountChanged(null);
+                    } catch (e) {
+                        console.error('[wallet] call vm.accountChanged(null) failed.', e);
+                    }
+                    try {
+                        window.vm.didChanged && window.vm.didChanged(null);
+                    } catch (e) {
+                        console.error('[wallet] call vm.didChanged() failed.', e);
+                    }
+                },
+                chainChanged: function (chainId) {
+                    console.log('[wallet] chain changed: ' + chainId + ' = ' + parseInt(chainId, 16));
+                    this.chainId = parseInt(chainId, 16);
+                    try {
+                        window.vm.chainChanged && window.vm.chainChanged(this.chainId);
+                    } catch (e) {
+                        console.error('[wallet] call vm.chainChanged() failed.', e);
+                    }
+                },
+                connectWallet: async function () {
+                    console.log('[wallet] try connect wallet...');
+                    if (window.getWeb3Provider() === null) {
+                        console.error('[wallet] there is no web3 provider.');
+                        return false;
+                    }
+                    try {
+                        this.accountChanged(await window.ethereum.request({
+                            method: 'eth_requestAccounts',
+                        }));
+                        this.chainChanged(await window.ethereum.request({
+                            method: 'eth_chainId'
+                        }));
+                        window.ethereum.on('disconnect', this.disconnected);
+                        window.ethereum.on('accountsChanged', this.accountChanged);
+                        window.ethereum.on('chainChanged', this.chainChanged);
+                    } catch (e) {
+                        console.error('[wallet] could not get a wallet connection.', e);
+                        return false;
+                    }
+                    return true;
+                },
+                switchChain: async function () {
+                    if (this.wrongNetwork) {
+                        await ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: '0x' + window.CHAIN_ID.toString(16) }],
+                        });
+                    }
+                }
+            },
+            mounted: async function () {
+                $('#wallet').css('display', 'flex');
+                // try connect wallet:
+                if (window.getWeb3Provider()) {
+                    if (localStorage.getItem('__address__')) {
+                        console.log('[wallet] try auto connect...');
+                        await this.connectWallet();
+                    }
+                }
+            }
+        });
+    }
+
+    $(function () {
+        // try init_vm:
+        if (window.init_vm) {
+            if (window.init_vm.constructor.name === 'AsyncFunction') {
+                window.init_vm()
+                    .catch((e) => {
+                        console.error('init vm failed.', e);
+                        init_wallet();
+                    })
+                    .then(() => {
+                        init_wallet();
+                    });
+            } else {
+                try {
+                    init_vm();
+                } catch (e) {
+                    console.error('init vm failed.', e);
+                }
+                init_wallet();
+            }
+        }
+    });
+</script>
+
+<div id="vm_wallet" class="container">
+    <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom"
+        style="position:fixed; top:0; left:0; right:0; z-index: 99;">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <img src="/assets/images/logo.svg" style="height:35px">
+                <span class="d-none d-md-inline">OpenDID</span>
+            </a>
+            <ul class="navbar-nav d-none d-lg-flex">
+                <form onsubmit="return doSearch(this)" action="/search.html" method="get">
+                    <span class="ps-2 pt-2 text-muted" style="position:absolute"><i class="bi bi-search"></i></span>
+                    <input id="q_top" name="q" type="search" maxlength="50" class="form-control"
+                        style="width:240px;padding-left:2em;" placeholder="Search name or address"
+                        data-i18n-placeholder:ja="名前または住所を検索" data-i18n-placeholder:zh="搜索名字或地址">
+                </form>
+            </ul>
+            <ul id="wallet" class="mr-2 navbar-nav navbar-right-wrap"
+                style="flex-direction: row !important; display:none">
+                <li v-show="statusLoadingDID" class="ms-2 nav-item">
+                    <div class="spinner-border spinner-border-sm" style="margin-top:12px"></div>
+                </li>
+                <li v-show="!statusLoadingDID && did" class="ms-2" style="display:inline-block">
+                    <a v-bind:href="'/name.html?name='+(did && did.name)" class="avatar">
+                        <div class="rounded-circle border border-1 d-block"
+                            style="margin-top: 5px;width:32px;height:32px;background-color:#fff;background-size:cover;"
+                            v-bind:style="{'background-image':'url('+(avatar||'/assets/images/user.svg')+')'}">
+                        </div>
+                    </a>
+                </li>
+                <li v-show="!statusLoadingDID && did" class="ms-2 nav-item">
+                    <a v-bind:href="'/name.html?name='+(did && did.name)" class="nav-link"
+                        v-bind:title="did && did.name" v-text="abbr(did && did.name)"></a>
+                </li>
+                <li v-show="!statusLoadingDID && did" class="ms-2 nav-item">
+                    <a href="/chat.html" class="nav-link" title="Chat with NoStr">
+                        <i class="bi bi-chat-square-text"></i>
+                    </a>
+                </li>
+                <li v-show="account!==null" class="ms-2 d-inline-block">
+                    <div class="d-flex flex-column">
+                        <div style="line-height: 20px;">
+                            <span v-if="chainId!==0 && !wrongNetwork" v-text="networkName"></span>
+                            <a v-if="chainId!==0 && wrongNetwork" v-on:click="switchChain" href="#0"
+                                class="text-danger">
+                                <span data-i18n:zh="不支持的鏈">Unsupported Chain</span>
+                                (<span v-text="chainId"></span>)
+                            </a>
+                        </div>
+                        <div style="line-height: 20px;">
+                            <a v-on:click="gotoScanUrl" href="#0" v-text="abbr(account)"></a>
+                        </div>
+                    </div>
+                </li>
+                <li v-if="account===null" class="ms-2 nav-item">
+                    <button v-on:click="connectWallet" type="button" class="btn btn-primary"
+                        data-i18n:en="Connect Wallet" data-i18n:ja="ウォレットを接続" data-i18n:ko="지갑 연결" data-i18n:zh="連接錢包">
+                    </button>
+                </li>
+                <li class="ms-2 nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#0" data-bs-toggle="dropdown">
+                        <i class="bi bi-translate"></i>
+                    </a>
+                    <ul id="i18n" class="dropdown-menu dropdown-menu-end" style="position: absolute;">
+                        <li><a class="dropdown-item" data-i18n-lang="en">English</a></li>
+                        <li><a class="dropdown-item" data-i18n-lang="ja">日本語</a></li>
+                        <li><a class="dropdown-item" data-i18n-lang="ko">한국어</a></li>
+                        <li><a class="dropdown-item" data-i18n-lang="zh">中文</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </nav>
+</div>
+<div style="height: 62px"><!-- placeholder --></div>
