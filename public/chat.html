@@ -580,7 +580,7 @@
                     npubEncode: null,
                     statusNostrNotSet: false,
                     statusNostrNotMatch: false,
-                    idleRelays: Arrays(...window.PUBLIC_RELAYS),
+                    idleRelays: Array(...window.PUBLIC_RELAYS),
                     usedRelays: [],
                     connections: [],
                     messages: [
@@ -640,7 +640,7 @@
                         let that = this;
                         showConfirm('Warning', 'nsec is your private key of nostr protocol. Make sure only used in trusted nostr app. Copy nsec to clipboard?', function () {
                             copyText(NostrTools.nip19.nsecEncode(that.nsec), function () {
-                                showTip('NOTE: your nsec is copied to clipboard.');
+                                showAlert('NOTICE', 'NOTE: your nsec is copied to clipboard. Make sure only used in trusted nostr app.');
                             });
                         });
                     },
