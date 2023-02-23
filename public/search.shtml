@@ -162,7 +162,7 @@
                     <p class="text-danger">Sorry, name <span v-text="name" class="fw-bold"></span> is invalid.</p>
                     <p>An OpenDID name must be:</p>
                     <ul>
-                        <li>5 ~ 50 characters;</li>
+                        <li>6 ~ 50 characters;</li>
                         <li>by English letters and digits.</li>
                     </ul>
                 </div>

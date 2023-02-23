@@ -15,7 +15,7 @@
     let
         registryAddress = '0x5dA568a00E2007Bb99eE808828253C1eE7d9Bcb1',
         bindControllerAddress = '0x928191B94159f03C7338d188885Cd6B808025a02',
-        registerControllerAddress = isTestnet ? '0x0C45882D25eeeFE4F36AE29ed50bd53E7d9Ef313' : '0x';
+        registerControllerAddress = isTestnet ? '0x0C45882D25eeeFE4F36AE29ed50bd53E7d9Ef313' : '0x0C45882D25eeeFE4F36AE29ed50bd53E7d9Ef313';
 
     window.CHAIN_ID = isTestnet ? 80001 : 137;
     window.CHAIN_NAME = isTestnet ? 'Polygon Testnet' : 'Polygon';
@@ -33,7 +33,7 @@
 
     // did name pattern:
     function isValidName(name) {
-        return /^[a-z0-9]{5,50}$/.test(name.toLowerCase());
+        return /^[a-z0-9]{6,50}$/.test(name.toLowerCase());
     }
 
     function doSearch(formObject) {
